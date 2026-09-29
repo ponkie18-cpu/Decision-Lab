@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isSignedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function isValidLearnerCode(code) {
+      return code is string && code.size() >= 3 && code.size() <= 32;
+    }
+
+    // 1. staff/{uid}
+    // Facilitators/Admins
+    match /staff/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isStaff());
+      allow list: if isStaff();
+      allow create: if isStaff() || (isSignedIn() && request.auth.uid == uid && request.resource.data.role in ['facilitator', 'admin']);
+      allow update, delete: if isStaff();
+    }
+
+    // 2. learners/{learnerCode}
+    // get: allowed if request.auth.uid == resource.data.authUid OR caller is staff.
+    // list: staff only.
+    // create: staff only (facilitators seed codes — a learner must never be able to create their own code).
+    // update: staff only, OR a signed-in user updating only the authUid field on first login to bind their session.
+    match /learners/{learnerCode} {
+      allow get: if isStaff() || (isSignedIn() && resource.data.authUid == request.auth.uid);
+      allow list: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authUid'])
+        && (!('authUid' in resource.data) || resource.data.authUid == null || resource.data.authUid == request.auth.uid)
+        && request.resource.data.authUid == request.auth.uid
+      );
+      allow delete: if false;
+    }
+
+    // 3. moduleRuns/{runId}
+    // get: allowed if the run's learnerCode resolves to a learners doc whose authUid == request.auth.uid, OR caller is staff.
+    // list: staff only.
+    // create/update: existing consentConfirmed == true check from Phase 1 stays, AND additionally the caller's request.auth.uid must match the learner's bound authUid, OR caller is staff.
+    match /moduleRuns/{runId} {
+      allow get: if isStaff() || (
+        isSignedIn()
+        && get(/databases/$(database)/documents/learners/$(resource.data.learnerCode)).data.authUid == request.auth.uid
+      );
+      
+      allow list: if isStaff() || (
+        isSignedIn()
+        && get(/databases/$(database)/documents/learners/$(resource.data.learnerCode)).data.authUid == request.auth.uid
+      );
+
+      allow create: if request.resource.data.learnerCode is string
+        && get(/databases/$(database)/documents/learners/$(request.resource.data.learnerCode)).data.consentConfirmed == true
+        && (
+          isStaff() || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/learners/$(request.resource.data.learnerCode)).data.authUid == request.auth.uid
+          )
+        );
+
+      allow update: if request.resource.data.learnerCode == resource.data.learnerCode
+        && get(/databases/$(database)/documents/learners/$(resource.data.learnerCode)).data.consentConfirmed == true
+        && (
+          isStaff() || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/learners/$(resource.data.learnerCode)).data.authUid == request.auth.uid
+          )
+        );
+
+      allow delete: if false;
+
+      // 4. Subcollection: moduleRuns/{runId}/rounds/{roundNumber}
+      match /rounds/{roundNumber} {
+        allow read: if isStaff() || (
+          isSignedIn()
+          && get(/databases/$(database)/documents/learners/$(get(/databases/$(database)/documents/moduleRuns/$(runId)).data.learnerCode)).data.authUid == request.auth.uid
+        );
+
+        allow create, update: if (
+          isStaff() || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/learners/$(get(/databases/$(database)/documents/moduleRuns/$(runId)).data.learnerCode)).data.authUid == request.auth.uid
+          )
+        ) && get(/databases/$(database)/documents/learners/$(get(/databases/$(database)/documents/moduleRuns/$(runId)).data.learnerCode)).data.consentConfirmed == true;
+
+        allow delete: if false;
+      }
+    }
+
+    // 5. auditLogs/{logId}
+    // Real-time decision audit log for administrator oversight
+    match /auditLogs/{logId} {
+      allow read: if isStaff() || isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+  }
+}

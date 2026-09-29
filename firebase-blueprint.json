@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "Staff": {
+      "title": "Staff",
+      "description": "Facilitator or admin staff profile tied to Firebase Auth UID",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["facilitator", "admin"] },
+        "email": { "type": "string" }
+      },
+      "required": ["name", "role"]
+    },
+    "Learner": {
+      "title": "Learner",
+      "description": "Anonymous learner identity representation strictly containing no minor PII",
+      "type": "object",
+      "properties": {
+        "learnerCode": { "type": "string", "description": "Facilitator-assigned code, e.g. TUCK-2026-014" },
+        "cohortId": { "type": "string", "description": "Cohort identifier" },
+        "consentConfirmed": { "type": "boolean", "description": "True only after offline guardian/school consent confirmed" },
+        "consentConfirmedBy": { "type": "string", "description": "Facilitator staff ID" },
+        "consentConfirmedAt": { "type": "string", "format": "date-time", "description": "Timestamp of consent confirmation" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of record creation" },
+        "authUid": { "type": "string", "description": "Bound Firebase Auth anonymous UID for session ownership" }
+      },
+      "required": ["learnerCode", "cohortId", "consentConfirmed", "consentConfirmedBy", "consentConfirmedAt", "createdAt"]
+    },
+    "ModuleRun": {
+      "title": "ModuleRun",
+      "description": "Execution run of a simulation module by an anonymous learner",
+      "type": "object",
+      "properties": {
+        "learnerCode": { "type": "string", "description": "FK to learners/{learnerCode}" },
+        "userId": { "type": "string", "description": "Anonymous learner identifier (matches learnerCode, never PII)" },
+        "moduleId": { "type": "string", "enum": ["tuckshop", "schoolEventPlanner"] },
+        "cohortId": { "type": "string" },
+        "attemptType": { "type": "string", "enum": ["baseline", "replay"] },
+        "status": { "type": "string", "enum": ["in_progress", "completed", "abandoned"] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "lastUpdatedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "currentRound": { "type": "number" }
+      },
+      "required": ["learnerCode", "userId", "moduleId", "cohortId", "attemptType", "status", "startedAt", "lastUpdatedAt", "currentRound"]
+    },
+    "RoundRecord": {
+      "title": "RoundRecord",
+      "description": "Subcollection document representing a single round's decisions and outcomes",
+      "type": "object",
+      "properties": {
+        "round": { "type": "number" },
+        "decisions": { "type": "object" },
+        "results": { "type": "object" },
+        "writtenAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["round", "decisions", "results", "writtenAt"]
+    }
+  },
+  "firestore": {
+    "/staff/{uid}": {
+      "schema": { "$ref": "#/entities/Staff" },
+      "description": "Facilitator and administrator role registry"
+    },
+    "/learners/{learnerCode}": {
+      "schema": { "$ref": "#/entities/Learner" },
+      "description": "Anonymous learner consent & identification registry"
+    },
+    "/moduleRuns/{runId}": {
+      "schema": { "$ref": "#/entities/ModuleRun" },
+      "description": "Simulation runs tied strictly to learnerCode"
+    },
+    "/moduleRuns/{runId}/rounds/{roundNumber}": {
+      "schema": { "$ref": "#/entities/RoundRecord" },
+      "description": "Per-round decisions and results for a run"
+    }
+  }
+}

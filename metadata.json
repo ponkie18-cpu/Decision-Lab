@@ -1,0 +1,8 @@
+{
+  "name": "Dinaledi360 - Decision-Intelligence for Entrepreneurs",
+  "description": "Dinaledi360 helps learners and entrepreneurs make business decisions, see the consequences, and produce evidence of business readiness through immersive simulations and AI-driven forensic feedback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
