@@ -30,6 +30,12 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { RegistrationForm } from './components/auth/RegistrationForm';
 import { LoginForm } from './components/auth/LoginForm';
 import { LearnerLogin } from './components/auth/LearnerLogin';
+import { MarketIntelModal } from './components/modals/MarketIntelModal';
+import { ArtifactModal } from './components/modals/ArtifactModal';
+import { ReportModal } from './components/modals/ReportModal';
+import { SwitchConfirmModal, ResetConfirmModal } from './components/modals/ConfirmModals';
+import { ChoiceGroup, OpportunityGate, DecisionLedger, ComplianceTimeline } from './components/simulation/SimulationHelpers';
+import { useLearnerSession } from './hooks/useLearnerSession';
 import { getCurrentSessionUser, logoutUser } from './services/authService';
 import { 
   validateLearnerConsent, 
@@ -274,57 +280,12 @@ export default function App() {
     }
   }, [isModule1, state.round, lastRound]);
 
-  // Validate learner and sync active run from Firestore
-  React.useEffect(() => {
-    const initLearnerSession = async () => {
-      const cachedCode = localStorage.getItem('dinaledi360_active_learner_code');
-      if (!cachedCode) {
-        setAuthRoute('learner_login');
-        return;
-      }
-
-      try {
-        const validation = await validateLearnerConsent(cachedCode);
-        if (!validation.valid || !validation.learner) {
-          localStorage.removeItem('dinaledi360_active_learner_code');
-          setActiveLearner(null);
-          setAuthRoute('learner_login');
-          return;
-        }
-
-        setActiveLearner(validation.learner);
-
-        // Fetch or create run for active module
-        const activeRes = await getActiveRun(validation.learner.learnerCode, state.module);
-        if (activeRes.run) {
-          setActiveRunId(activeRes.run.runId);
-          // If rounds exist in Firestore, restore history
-          if (activeRes.rounds && activeRes.rounds.length > 0) {
-            const lastRd = activeRes.rounds[activeRes.rounds.length - 1];
-            setLastRound(lastRd);
-            setState(prev => ({
-              ...prev,
-              round: activeRes.run!.currentRound || (lastRd.round + 1),
-              history: activeRes.rounds
-            }));
-          }
-        } else {
-          // Initialize new run strictly gated by consent
-          const newRun = await startModuleRun(
-            validation.learner.learnerCode,
-            validation.learner.cohortId,
-            state.module,
-            'baseline'
-          );
-          setActiveRunId(newRun.runId);
-        }
-      } catch (e) {
-        console.error('Failed to init Firestore learner session:', e);
-      }
-    };
-
-    initLearnerSession();
-  }, [state.module]);
+  const { activeLearner, setActiveLearner, activeRunId } = useLearnerSession(
+    state.module,
+    setAuthRoute,
+    setState,
+    setLastRound
+  );
 
   const switchModule = (mod: ModuleType, force = false) => {
     // Lock check
@@ -1832,263 +1793,48 @@ export default function App() {
       </footer>
       <AnimatePresence>
         {showMarketIntel && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-8 bg-[#0F172A]/90 backdrop-blur-md"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[#0D1117] border border-slate-700 w-full max-w-lg p-10 space-y-8 rounded-sm shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-              <div className="space-y-2">
-                <h3 className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em]">Market Intelligence</h3>
-                <h2 className="text-2xl font-black uppercase text-white tracking-tighter">Decision Constraint Framing</h2>
-              </div>
-              
-              <div className="space-y-6">
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Before you begin, Sipho, you must understand how customers in Thabong react to prices. 
-                  Market research shows most tuck shops sell at these ranges:
-                </p>
-                
-                <div className="grid grid-cols-1 gap-3">
-                  {[
-                    { item: "Chips", range: "R7 – R10", color: "bg-blue-500" },
-                    { item: "Drinks", range: "R8 – R12", color: "bg-emerald-500" },
-                    { item: "Sweets", range: "R4 – R6", color: "bg-amber-500" }
-                  ].map((entry) => (
-                    <div key={entry.item} className="flex justify-between items-center bg-slate-900/50 p-4 border border-slate-800">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 rounded-full ${entry.color}`}></div>
-                        <span className="text-[10px] font-black uppercase text-slate-300">{entry.item}</span>
-                      </div>
-                      <span className="text-sm font-mono font-bold text-white">{entry.range}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-sm flex items-start gap-4">
-                  <AlertTriangle className="text-amber-500 shrink-0" size={16} />
-                  <p className="text-[11px] text-amber-200/70 leading-relaxed font-bold uppercase italic">
-                    "If your price is outside this range, customers will react strongly. They don't care about your costs—they care about their pockets."
-                  </p>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setShowMarketIntel(false)}
-                className="w-full bg-white text-black py-4 text-[11px] font-black uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-              >
-                Understood. Let's Trade.
-              </button>
-            </motion.div>
-          </motion.div>
+          <MarketIntelModal onClose={() => setShowMarketIntel(false)} />
         )}
         {showArtifact && lastRound?.results?.artifact && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-[#0F172A]/90 backdrop-blur-sm"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-[#0A0C10] border border-slate-800 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col rounded-sm shadow-2xl"
-            >
-              <div className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-[#0F172A]">
-                <div className="flex items-center gap-3">
-                  <FileText className="text-blue-400" size={18} />
-                  <span className="text-xs font-black uppercase tracking-widest text-white">
-                    {isModule4 ? "Strategic Interaction Report" : (isModule3 ? "Compliance Recovery Plan" : (isModule1 ? "Tuck Shop Performance Report" : "Strategic Artifact"))}
-                  </span>
-                </div>
-                <button 
-                  onClick={() => setShowArtifact(false)}
-                  className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-12 markdown-body text-slate-300">
-                <Markdown>{lastRound.results.artifact}</Markdown>
-              </div>
-              <div className="h-16 border-t border-slate-800 bg-[#0F172A] flex items-center justify-between px-8">
-                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-widest italic">
-                  Saved to Business File Artifacts
-                </div>
-                <button 
-                  onClick={() => setShowArtifact(false)}
-                  className="bg-white text-black px-6 py-2 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all shadow-lg"
-                >
-                  Close Report
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ArtifactModal
+            artifact={lastRound.results.artifact}
+            isModule1={isModule1}
+            isModule3={isModule3}
+            isModule4={isModule4}
+            onClose={() => setShowArtifact(false)}
+          />
         )}
         {showReport && currentRunReport && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center p-8 bg-[#0F172A]/95 backdrop-blur-xl"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[#000000] border border-indigo-500/30 w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col rounded-sm shadow-[0_0_100px_rgba(79,70,229,0.15)]"
-            >
-              <div className="h-20 border-b border-indigo-500/20 flex items-center justify-between px-10 bg-gradient-to-r from-indigo-950/40 to-transparent">
-                <div>
-                  <h3 className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.3em] mb-1">Decision Intelligence Report</h3>
-                  <h2 className="text-xl font-black uppercase text-white tracking-tighter italic">SME Readiness Benchmark</h2>
-                </div>
-                <button 
-                  onClick={() => setShowReport(false)}
-                  className="w-10 h-10 flex items-center justify-center border border-slate-800 hover:bg-slate-800 rounded-sm text-slate-400"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,1),rgba(0,0,0,1))]">
-                {learningState.history.length > 1 && (
-                  <div className="mb-8 flex gap-2 overflow-x-auto pb-4 border-b border-indigo-500/10">
-                    {learningState.history.map((run, idx) => (
-                      <button
-                        key={run.id}
-                        onClick={() => setCurrentRunReport(generateIndividualReport(run))}
-                        className={`shrink-0 px-4 py-2 text-[8px] font-black uppercase tracking-widest border rounded-sm transition-all ${
-                          currentRunReport === generateIndividualReport(run)
-                          ? 'bg-indigo-600 border-indigo-400 text-white'
-                          : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600'
-                        }`}
-                      >
-                        {run.attemptType === 'baseline' ? 'Baseline' : `Replay #${learningState.history.length - idx}`}
-                        <div className="text-[6px] opacity-60 mt-1">{new Date(run.timestamp).toLocaleDateString()}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="markdown-body prose prose-invert prose-sm max-w-none">
-                  <Markdown>{currentRunReport}</Markdown>
-                </div>
-              </div>
-
-              <div className="p-8 border-t border-indigo-500/20 bg-indigo-950/20 flex gap-4">
-                 <button 
-                  onClick={() => {
-                    const blob = new Blob([currentRunReport], { type: 'text/markdown' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `SME_Report_${new Date().toISOString().split('T')[0]}.md`;
-                    a.click();
-                  }}
-                  className="flex-1 border border-indigo-500/40 text-indigo-300 py-4 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-indigo-500/10 transition-all font-mono"
-                >
-                  Download Evidence (.MD)
-                </button>
-                <button 
-                  onClick={() => setShowReport(false)}
-                  className="flex-1 bg-white text-black py-4 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-                >
-                  Acknowledge & Continue
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ReportModal
+            currentRunReport={currentRunReport}
+            history={learningState.history}
+            onSelectReport={(reportText) => setCurrentRunReport(reportText)}
+            onClose={() => setShowReport(false)}
+          />
         )}
         {showSwitchConfirm && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-          >
-            <motion.div 
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              className="bg-[#0B0F1A] border border-slate-800 p-8 rounded-sm max-w-md w-full shadow-2xl"
-            >
-              <h3 className="text-sm font-black uppercase text-white tracking-widest mb-4">Confirm Module Switch</h3>
-              <p className="text-xs text-slate-400 mb-8 leading-relaxed font-medium">
-                Are you sure you want to leave this module? 
-                <br /><br />
-                Your current session progress will be finalized and a decision report will be generated. You can always come back and replay this module later.
-              </p>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => {
-                    setShowSwitchConfirm(false);
-                    setPendingModule(null);
-                  }}
-                  className="flex-1 border border-slate-800 text-slate-400 py-3 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-slate-800 transition-all"
-                >
-                  Stay Here
-                </button>
-                <button 
-                  onClick={() => {
-                    if (pendingModule) {
-                      switchModule(pendingModule, true);
-                      setShowSwitchConfirm(false);
-                      setPendingModule(null);
-                    }
-                  }}
-                  className="flex-1 bg-indigo-600 text-white py-3 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-indigo-500 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)]"
-                >
-                  Confirm Switch
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <SwitchConfirmModal
+            onCancel={() => {
+              setShowSwitchConfirm(false);
+              setPendingModule(null);
+            }}
+            onConfirm={() => {
+              if (pendingModule) {
+                switchModule(pendingModule, true);
+                setShowSwitchConfirm(false);
+                setPendingModule(null);
+              }
+            }}
+          />
         )}
         {showResetConfirm && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-          >
-            <motion.div 
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              className="bg-[#0B0F1A] border border-red-500/20 p-8 rounded-sm max-w-md w-full shadow-2xl shadow-red-500/5"
-            >
-              <div className="flex items-center gap-3 mb-4 text-red-500">
-                <AlertTriangle size={20} />
-                <h3 className="text-sm font-black uppercase tracking-widest">Reset Simulation</h3>
-              </div>
-              <p className="text-xs text-slate-400 mb-8 leading-relaxed font-medium">
-                Are you sure you want to reset your current simulation history for this module? 
-                <br /><br />
-                This will wipe out all decisions and results for the current run, starting you back at the baseline round. This action cannot be undone.
-              </p>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setShowResetConfirm(false)}
-                  className="flex-1 border border-slate-800 text-slate-400 py-3 text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-slate-800 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    switchModule(state.module, true);
-                    setShowResetConfirm(false);
-                  }}
-                  className="flex-1 bg-red-950/40 hover:bg-red-900/40 border border-red-500/30 text-red-400 py-3 text-[10px] font-black uppercase tracking-widest rounded-sm transition-all shadow-[0_0_20px_rgba(239,68,68,0.15)] cursor-pointer"
-                >
-                  Confirm Reset
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ResetConfirmModal
+            onCancel={() => setShowResetConfirm(false)}
+            onConfirm={() => {
+              switchModule(state.module, true);
+              setShowResetConfirm(false);
+            }}
+          />
         )}
       </AnimatePresence>
 
@@ -2159,181 +1905,3 @@ export default function App() {
 );
 }
 
-function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between opacity-50">
-        <div className="flex items-center gap-2">
-          {icon}
-          <div className="flex flex-col">
-            <h4 className="text-[9px] uppercase font-black tracking-widest text-[#64748B]">{label}</h4>
-            {help && <span className="text-[7px] text-[#475569] font-bold">{help}</span>}
-          </div>
-        </div>
-        {deadline && round && (
-          <div className={`text-[8px] font-mono font-bold uppercase transition-colors ${
-            round > deadline ? 'text-red-500 animate-pulse' :
-            round === deadline ? 'text-amber-500' : 'text-slate-500'
-          }`}>
-            {round > deadline ? 'CRITICAL' : round === deadline ? 'DUE NOW' : `DUE MONTH ${deadline}`}
-          </div>
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-2">
-        {options.map(opt => {
-          const isCurrent = currentLevel === opt || (currentLevel?.includes(opt.split(' ')[0]) && opt !== "None" && opt !== "Ignore");
-          const isActive = value === opt;
-          return (
-            <button
-              key={opt}
-              onClick={() => onChange(opt)}
-              className={`p-3 text-left transition-all border rounded-sm flex justify-between items-center text-[10px] font-bold ${
-                isActive 
-                  ? 'bg-blue-500/10 border-blue-500 text-blue-400' 
-                  : isCurrent 
-                    ? 'bg-slate-900 border-emerald-500/30 text-emerald-500/80'
-                    : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600'
-              }`}
-            >
-              <div className="flex flex-col">
-                <span>{opt}</span>
-                {isCurrent && !isActive && <span className="text-[7px] text-emerald-500 font-mono">CURRENT STATUS</span>}
-              </div>
-              {!costs[opt] ? null : <span className="font-mono text-[9px] opacity-60">R{costs[opt]}</span>}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function OpportunityGate({ state }: { state: GameState }) {
-  if (state.module !== 'nomsa_fine') return null;
-
-  const isReg = state.complianceState?.registration.level === 'Completed';
-  const isTax = state.complianceState?.tax.level === 'Completed' || state.complianceState?.tax.level === 'Pending';
-  const isRecords = state.complianceState?.records.level === 'Strong' || state.complianceState?.records.level === 'Proper';
-
-  const nextOpp = state.round < 4 ? "School Catering Contract" : "Growth Funding Gate";
-  const required = state.round < 4 ? 
-    [{ label: "Business Registration", ok: isReg, critical: true, consequence: "Bids will be disqualified" }, { label: "Tax Clearance", ok: isTax, critical: true, consequence: "Payment cannot be processed" }] :
-    [{ label: "Business Registration", ok: isReg, critical: true, consequence: "Application rejected instantly" }, { label: "Tax Clearance", ok: isTax, critical: true, consequence: "Strict funding block" }, { label: "High-Quality Records", ok: isRecords, critical: false, consequence: "Risk score too high for approval" }];
-
-  const isBlocked = required.some(r => !r.ok && (r.critical || state.round >= 4));
-
-  return (
-    <div className="bg-[#0D1117] border border-slate-800 p-4 rounded-sm">
-      <div className="flex justify-between items-center mb-1">
-        <h3 className="text-[9px] font-black uppercase text-[#64748B] tracking-widest">Opportunity Readiness</h3>
-        <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded-sm ${isBlocked ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
-          {isBlocked ? 'BLOCKED' : 'READY'}
-        </span>
-      </div>
-      <div className="text-[10px] font-bold text-white uppercase mb-2">Gate: {nextOpp}</div>
-      <div className="space-y-1.5">
-        {required.map((r, i) => (
-          <div key={i} className="group relative">
-            <div className="flex items-center justify-between">
-              <span className={`text-[8px] uppercase ${r.ok ? 'text-slate-500' : 'text-slate-300 font-bold'}`}>
-                {r.label}
-                {!r.ok && r.critical && <span className="ml-1 text-[7px] text-red-500 font-black">!</span>}
-              </span>
-              {r.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <X size={10} className="text-red-500" />}
-            </div>
-            {!r.ok && (
-              <div className="hidden group-hover:block absolute left-0 top-full mt-1 z-20 bg-red-950 border border-red-500/30 p-2 rounded-sm shadow-xl w-full">
-                <p className="text-[7px] text-red-300 font-black uppercase italic tracking-widest mb-1">Consequence:</p>
-                <p className="text-[9px] text-red-200 leading-tight">{r.consequence}</p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
-  if (ledger.length === 0) return null;
-  
-  return (
-    <div className="bg-[#0D1117] border border-slate-800 p-4 rounded-sm">
-      <h3 className="text-[9px] font-black uppercase text-[#64748B] tracking-widest mb-3">Audit Trail (Decision Ledger)</h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-        {ledger.map((entry, i) => {
-          const unit = entry.module === 'event_disaster' ? 'DAY' : (entry.module === 'money_rules' ? 'RND' : 'MONTH');
-          const modLabel = entry.module === 'money_rules' ? 'M1' : (entry.module === 'event_disaster' ? 'M2' : 'M3');
-          
-          return (
-            <div key={i} className="border-l-2 border-slate-800 pl-3 py-1">
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[7px] font-black text-slate-500 bg-slate-900 px-1 rounded-sm">{modLabel}</span>
-                  <span className="text-[8px] font-black text-blue-400">{unit} {entry.round}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {entry.type && <span className="text-[6px] font-black bg-slate-800 text-slate-400 px-1 rounded-[1px] uppercase">{entry.type}</span>}
-                  <span className="text-[7px] font-mono text-slate-500 uppercase">{entry.statusChange}</span>
-                </div>
-              </div>
-              <div className="text-[9px] text-slate-200 font-bold uppercase mb-1">{entry.obligation}</div>
-              <div className="text-[8px] text-slate-400 leading-tight">
-                Action: <span className="text-slate-200">{entry.decision}</span>
-              </div>
-              <div className="text-[8px] text-slate-500 italic mt-1 flex justify-between items-center">
-                <span>{entry.result}</span>
-                {entry.impact && <span className={`text-[6px] font-black px-1 rounded-[1px] ${
-                  entry.impact === 'CrossModule' ? 'text-indigo-400 bg-indigo-500/10' :
-                  entry.impact === 'Delayed' ? 'text-amber-400 bg-amber-500/10' : 'text-blue-400 bg-blue-500/10'
-                }`}>{entry.impact} IMPACT</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ComplianceTimeline({ state }: { state: GameState }) {
-  if (state.module !== 'nomsa_fine') return null;
-  
-  const events = [
-    { month: 1, label: 'Records Required' },
-    { month: 2, label: 'Registration Due' },
-    { month: 3, label: 'Tax Registration' },
-    { month: 4, label: 'Contract Opening' },
-    { month: 5, label: 'Permit Check' },
-    { month: 6, label: 'Funding Gate' },
-  ];
-
-  return (
-    <div className="bg-[#0D1117] border border-slate-800 p-4 rounded-sm">
-      <h3 className="text-[9px] font-black uppercase text-[#64748B] mb-4 tracking-widest">Compliance Timeline</h3>
-      <div className="relative">
-        <div className="absolute top-1/2 left-0 w-full h-px bg-slate-800 -translate-y-1/2" />
-        <div className="flex justify-between relative z-10">
-          {events.map((e) => {
-            const isCurrent = state.round === e.month;
-            const isPast = state.round > e.month;
-            return (
-              <div key={e.month} className="flex flex-col items-center">
-                <div className={`w-3 h-3 rounded-full border-2 border-[#0A0C10] ${
-                  isCurrent ? 'bg-blue-500 ring-2 ring-blue-500/20 scale-125' :
-                  isPast ? 'bg-emerald-500' : 'bg-slate-800'
-                }`} />
-                <div className="mt-2 text-center">
-                  <div className={`text-[7px] font-black uppercase tracking-tight ${isCurrent ? 'text-white' : 'text-slate-600'}`}>M{e.month}</div>
-                  <div className={`text-[6px] font-mono whitespace-pre w-8 leading-tight ${isCurrent ? 'text-blue-400' : 'text-slate-700'}`}>
-                    {e.label}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}

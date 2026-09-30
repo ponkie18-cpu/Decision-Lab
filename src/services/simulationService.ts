@@ -1,19 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 import { GameState, Decisions, RoundResults, RoundRecord } from "../types";
 import { detectBehavioralTags, EVENT_PLANNER_COSTS } from "./behavioralPatterns";
-
-function getAIClient() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === "MY_GEMINI_API_KEY") {
-    return null;
-  }
-  try {
-    return new GoogleGenAI({ apiKey: key });
-  } catch (e) {
-    console.warn("Failed to initialize GoogleGenAI:", e);
-    return null;
-  }
-}
+import { validateSimulationPayload } from "../lib/simulationValidation";
 
 function runDeterministicSimulation(
   currentState: GameState,
@@ -480,7 +469,6 @@ export async function simulateRound(
     - Round: ${currentState.round}
     - Behavior Identity: ${JSON.stringify(currentState.learningState?.behaviorIdentity || {})}
     - Interaction History: ${JSON.stringify(currentState.learningState?.interactionHistory || [])}
-    - User Decision: ${decisions.price || decisions.action || decisions.offer}
     
     RETURN JSON:
     {
@@ -864,60 +852,68 @@ export async function simulateRound(
     }
   `));
 
-  const ai = getAIClient();
-  if (ai) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { responseMimeType: "application/json" }
-      });
+  try {
+    const simulateProxy = httpsCallable<{ prompt: string; userDecisions: Decisions }, any>(functions, 'simulateRoundProxy');
+    const response = await simulateProxy({ prompt, userDecisions: decisions });
+    const raw = response.data;
 
-      const raw = JSON.parse(response.text || "{}");
-      if (raw && typeof raw === "object" && (raw.marketFeedback || raw.totalCost !== undefined || raw.profit !== undefined)) {
-        let nextRollingHistory = currentState.rollingHistory;
-        if (isModule1) {
-          const rh = currentState.rollingHistory || { prices: {}, restocks: {}, cash: [] };
-          const updateRolling = (current: string[], val: string) => {
-            const next = [...(current || []), val];
-            return next.slice(-3);
-          };
-
-          const nextPrices = { ...rh.prices };
-          const nextRestocks = { ...rh.restocks };
-          
-          ['chipsPrice', 'drinksPrice', 'sweetsPrice'].forEach(key => {
-            nextPrices[key] = updateRolling(nextPrices[key], decisions[key] || "0");
-          });
-          ['chipsRestock', 'drinksRestock', 'sweetsRestock'].forEach(key => {
-            nextRestocks[key] = updateRolling(nextRestocks[key], decisions[key] || "0");
-          });
-
-          const nextCash = [...rh.cash, currentState.cash].slice(-3);
-          nextRollingHistory = { prices: nextPrices, restocks: nextRestocks, cash: nextCash };
-        }
-
-        // NON-NEGOTIABLE CONSTRAINT: Behavioral tags must NEVER be decided by an LLM.
-        // Always compute patterns deterministically from stored round history.
-        const allRoundsForTags: RoundRecord[] = [
-          ...(currentState.history || []),
-          { round: currentState.round, decisions, results: raw as any }
-        ];
-        raw.patterns = detectBehavioralTags(currentState.module, allRoundsForTags);
-
-        return {
-          ...raw,
-          newState: {
-            ...raw.newState,
-            round: currentState.round + 1,
-            rollingHistory: nextRollingHistory
-          }
+    const validation = validateSimulationPayload(raw);
+    if (validation.valid && validation.payload) {
+      const validated = validation.payload;
+      let nextRollingHistory = currentState.rollingHistory;
+      if (isModule1) {
+        const rh = currentState.rollingHistory || { prices: {}, restocks: {}, cash: [] };
+        const updateRolling = (current: string[], val: string) => {
+          const next = [...(current || []), val];
+          return next.slice(-3);
         };
+
+        const nextPrices = { ...rh.prices };
+        const nextRestocks = { ...rh.restocks };
+
+        ['chipsPrice', 'drinksPrice', 'sweetsPrice'].forEach(key => {
+          nextPrices[key] = updateRolling(nextPrices[key], decisions[key] || "0");
+        });
+        ['chipsRestock', 'drinksRestock', 'sweetsRestock'].forEach(key => {
+          nextRestocks[key] = updateRolling(nextRestocks[key], decisions[key] || "0");
+        });
+
+        const nextCash = [...rh.cash, currentState.cash].slice(-3);
+        nextRollingHistory = { prices: nextPrices, restocks: nextRestocks, cash: nextCash };
       }
-    } catch (err) {
-      console.warn("Gemini API call failed, using deterministic simulation engine:", err);
+
+      // NON-NEGOTIABLE CONSTRAINT: Behavioral tags must NEVER be decided by an LLM.
+      // Always compute patterns deterministically from stored round history.
+      const allRoundsForTags: RoundRecord[] = [
+        ...(currentState.history || []),
+        { round: currentState.round, decisions, results: validated as any }
+      ];
+      validated.patterns = detectBehavioralTags(currentState.module, allRoundsForTags);
+
+      const computedProfit = typeof validated.profit === 'number' ? validated.profit : 0;
+      const computedCost = typeof validated.totalCost === 'number' ? validated.totalCost : 0;
+
+      return {
+        ...validated,
+        engineType: 'ai',
+        newState: {
+          ...currentState,
+          ...(validated.newState || {}),
+          cash: currentState.cash + computedProfit - computedCost,
+          round: currentState.round + 1,
+          rollingHistory: nextRollingHistory
+        }
+      };
+    } else {
+      console.warn("Gemini payload validation failed, falling back to deterministic simulation engine:", validation.error);
     }
+  } catch (err) {
+    console.warn("Gemini Callable API proxy failed, using deterministic simulation engine:", err);
   }
 
-  return runDeterministicSimulation(currentState, decisions);
+  const deterministicRes = runDeterministicSimulation(currentState, decisions);
+  return {
+    ...deterministicRes,
+    engineType: 'deterministic'
+  };
 }
