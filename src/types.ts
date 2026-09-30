@@ -224,6 +224,7 @@ export interface RoundResults {
   artifact?: string;
   missedSales?: number;
   missedRevenue?: number;
+  engineType?: 'ai' | 'deterministic';
 }
 
 export const INITIAL_STATE_MODULE_1: GameState = {
