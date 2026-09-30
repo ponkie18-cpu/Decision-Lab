@@ -25,7 +25,7 @@ import {
   Minus
 } from 'lucide-react';
 import { INITIAL_STATE, INITIAL_STATE_MODULE_1, INITIAL_STATE_MODULE_2, INITIAL_STATE_MODULE_3, INITIAL_STATE_MODULE_4, RoundRecord, GameState, Decisions, ModuleType, LearningState, M3_COSTS, DecisionLedgerEntry, ModuleRun } from './types';
-import { UserAdminProfile } from './types/admin';
+import { UserAdminProfile, AdultParticipantProfile } from './types/admin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { RegistrationForm } from './components/auth/RegistrationForm';
 import { LoginForm } from './components/auth/LoginForm';
@@ -35,7 +35,6 @@ import { ArtifactModal } from './components/modals/ArtifactModal';
 import { ReportModal } from './components/modals/ReportModal';
 import { SwitchConfirmModal, ResetConfirmModal } from './components/modals/ConfirmModals';
 import { ChoiceGroup, OpportunityGate, DecisionLedger, ComplianceTimeline } from './components/simulation/SimulationHelpers';
-import { useLearnerSession } from './hooks/useLearnerSession';
 import { getCurrentSessionUser, logoutUser } from './services/authService';
 import { 
   validateLearnerConsent, 
@@ -66,6 +65,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -280,12 +280,57 @@ export default function App() {
     }
   }, [isModule1, state.round, lastRound]);
 
-  const { activeLearner, setActiveLearner, activeRunId } = useLearnerSession(
-    state.module,
-    setAuthRoute,
-    setState,
-    setLastRound
-  );
+  // Validate learner and sync active run from Firestore
+  React.useEffect(() => {
+    const initLearnerSession = async () => {
+      const cachedCode = localStorage.getItem('dinaledi360_active_learner_code');
+      if (!cachedCode) {
+        setAuthRoute('learner_login');
+        return;
+      }
+
+      try {
+        const validation = await validateLearnerConsent(cachedCode);
+        if (!validation.valid || !validation.learner) {
+          localStorage.removeItem('dinaledi360_active_learner_code');
+          setActiveLearner(null);
+          setAuthRoute('learner_login');
+          return;
+        }
+
+        setActiveLearner(validation.learner);
+
+        // Fetch or create run for active module
+        const activeRes = await getActiveRun(validation.learner.learnerCode, state.module);
+        if (activeRes.run) {
+          setActiveRunId(activeRes.run.runId);
+          // If rounds exist in Firestore, restore history
+          if (activeRes.rounds && activeRes.rounds.length > 0) {
+            const lastRd = activeRes.rounds[activeRes.rounds.length - 1];
+            setLastRound(lastRd);
+            setState(prev => ({
+              ...prev,
+              round: activeRes.run!.currentRound || (lastRd.round + 1),
+              history: activeRes.rounds
+            }));
+          }
+        } else {
+          // Initialize new run strictly gated by consent
+          const newRun = await startModuleRun(
+            validation.learner.learnerCode,
+            validation.learner.cohortId,
+            state.module,
+            'baseline'
+          );
+          setActiveRunId(newRun.runId);
+        }
+      } catch (e) {
+        console.error('Failed to init Firestore learner session:', e);
+      }
+    };
+
+    initLearnerSession();
+  }, [state.module]);
 
   const switchModule = (mod: ModuleType, force = false) => {
     // Lock check
@@ -772,7 +817,13 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => {
+          if (prev.isMinorCohort) return prev;
+          return {
+            ...prev,
+            isAdmin: !prev.isAdmin,
+          } as AdultParticipantProfile;
+        })}
       />
     );
   }
