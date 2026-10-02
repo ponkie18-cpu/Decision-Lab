@@ -60,6 +60,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -811,7 +812,32 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => {
+          if (prev.isMinorCohort) {
+            const adultProfile: UserAdminProfile = {
+              id: prev.id,
+              name: prev.maskedName,
+              email: `${prev.id}@dinaledi360.co.za`,
+              institutionId: prev.institutionId,
+              institutionName: prev.institutionName,
+              cohortId: prev.cohortId,
+              cohortName: prev.cohortName,
+              role: 'admin',
+              isAdmin: true,
+              createdAt: prev.createdAt,
+              attemptsCount: prev.attemptsCount,
+              isMinorCohort: false,
+            };
+            return adultProfile;
+          }
+          const adultPrev = prev as import('./types/admin').AdultParticipantProfile;
+          const updated: UserAdminProfile = {
+            ...adultPrev,
+            isAdmin: !adultPrev.isAdmin,
+            role: !adultPrev.isAdmin ? 'admin' : adultPrev.role,
+          };
+          return updated;
+        })}
       />
     );
   }
