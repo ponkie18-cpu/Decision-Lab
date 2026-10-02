@@ -173,11 +173,37 @@ export async function loginUser(payload: LoginPayload): Promise<UserAdminProfile
 
   // Re-verify if email is in ADMIN_EMAILS in case seeding list updated
   const isAdmin = isSeededAdminEmail(emailNorm) || userRecord.profile.isAdmin;
-  const updatedProfile: UserAdminProfile = {
-    ...userRecord.profile,
-    isAdmin,
-    role: isAdmin ? 'admin' : userRecord.profile.role,
-  };
+  let updatedProfile: UserAdminProfile;
+
+  if (userRecord.profile.isMinorCohort) {
+    if (isAdmin) {
+      updatedProfile = {
+        id: userRecord.profile.id,
+        name: userRecord.profile.maskedName,
+        email: emailNorm,
+        institutionId: userRecord.profile.institutionId,
+        institutionName: userRecord.profile.institutionName,
+        cohortId: userRecord.profile.cohortId,
+        cohortName: userRecord.profile.cohortName,
+        role: 'admin',
+        isAdmin: true,
+        createdAt: userRecord.profile.createdAt,
+        attemptsCount: userRecord.profile.attemptsCount,
+        isMinorCohort: false,
+      };
+    } else {
+      updatedProfile = {
+        ...userRecord.profile,
+      };
+    }
+  } else {
+    const adultProf = userRecord.profile as import('../types/admin').AdultParticipantProfile;
+    updatedProfile = {
+      ...adultProf,
+      isAdmin,
+      role: isAdmin ? 'admin' : adultProf.role,
+    };
+  }
 
   localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedProfile));
   return updatedProfile;

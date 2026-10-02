@@ -12,7 +12,8 @@ import { BehavioralRadarView } from './BehavioralRadarView';
 import { CohortEvidenceReport } from './CohortEvidenceReport';
 import { FacilitatorConsentManager } from './FacilitatorConsentManager';
 import { AdminAuditLog } from './AdminAuditLog';
-import { ShieldCheck, UserCheck, Building2, ArrowLeft, KeyRound, Sparkles, UserPlus, Activity } from 'lucide-react';
+import { TraderRadarReport } from './TraderRadarReport';
+import { ShieldCheck, UserCheck, Building2, ArrowLeft, KeyRound, Sparkles, UserPlus, Activity, Radio } from 'lucide-react';
 
 interface AdminDashboardProps {
   currentUser: UserAdminProfile;
@@ -27,7 +28,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onExitAdmin,
   onToggleAdminRole,
 }) => {
-  const [activeTab, setActiveTab] = useState<'individual' | 'cohort' | 'consent' | 'audit'>('audit');
+  const [activeTab, setActiveTab] = useState<'individual' | 'cohort' | 'consent' | 'audit' | 'trader_radar'>('audit');
 
   return (
     <AdminRoute
@@ -127,6 +128,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Activity size={16} />
             4. Real-Time Audit Log (Decision Activity)
           </button>
+
+          <button
+            onClick={() => setActiveTab('trader_radar')}
+            className={`py-3 px-6 text-xs font-mono font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'trader_radar'
+                ? 'border-rose-500 text-rose-400 bg-rose-500/10 rounded-t-lg'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-t-lg'
+            }`}
+          >
+            <Radio size={16} className="text-rose-400 animate-pulse" />
+            5. Trader Radar (Confidential Technical Report)
+          </button>
         </div>
 
         {/* Render Tab Contents */}
@@ -140,6 +153,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           ) : activeTab === 'cohort' ? (
             <CohortEvidenceReport />
+          ) : activeTab === 'trader_radar' ? (
+            <TraderRadarReport />
           ) : (
             <AdminAuditLog />
           )}

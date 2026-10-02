@@ -31,15 +31,8 @@ async function runInteraction() {
   console.log("Interaction ID:", interaction.id);
   console.log("Status:", interaction.status);
 
-  // Extract the text output from the last model_output step
-  const lastStep = interaction.steps.at(-1);
-  console.log("Last step type:", lastStep?.type);
-  if (lastStep?.type === "model_output") {
-    const textPart = lastStep.content?.find(c => c.type === "text");
-    console.log("Output Text:\n", textPart?.text);
-  } else {
-    console.log("Last step payload:\n", JSON.stringify(lastStep, null, 2));
-  }
+  // Extract the text output from the interaction response
+  console.log("Interaction Result:\n", JSON.stringify(interaction, null, 2));
 }
 
 runInteraction().catch(err => {
