@@ -26,7 +26,9 @@ import {
 } from 'lucide-react';
 import { INITIAL_STATE, INITIAL_STATE_MODULE_1, INITIAL_STATE_MODULE_2, INITIAL_STATE_MODULE_3, INITIAL_STATE_MODULE_4, RoundRecord, GameState, Decisions, ModuleType, LearningState, M3_COSTS, DecisionLedgerEntry, ModuleRun } from './types';
 import { UserAdminProfile } from './types/admin';
-import { AdminDashboard } from './components/admin/AdminDashboard';
+// Bolt Optimization: Code-split AdminDashboard & heavy charting dependencies (recharts)
+// via React.lazy so learner sessions do not download admin analytics upfront.
+const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 import { RegistrationForm } from './components/auth/RegistrationForm';
 import { LoginForm } from './components/auth/LoginForm';
 import { LearnerLogin } from './components/auth/LearnerLogin';
@@ -802,17 +804,26 @@ export default function App() {
   // Route 3: Admin Portal
   if (authRoute === 'admin') {
     return (
-      <AdminDashboard
-        currentUser={currentUser}
-        liveSimulationRun={{
-          id: 'run_sim_live',
-          moduleId: state.module,
-          rounds: state.history,
-          timestamp: new Date().toISOString()
-        }}
-        onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
-      />
+      <React.Suspense fallback={
+        <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex items-center justify-center font-mono">
+          <div className="space-y-4 text-center">
+            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-xs text-slate-400 font-mono">Loading Admin Analytics & Behavioral Radar...</p>
+          </div>
+        </div>
+      }>
+        <AdminDashboard
+          currentUser={currentUser}
+          liveSimulationRun={{
+            id: 'run_sim_live',
+            moduleId: state.module,
+            rounds: state.history,
+            timestamp: new Date().toISOString()
+          }}
+          onExitAdmin={() => setAuthRoute('dashboard')}
+          onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        />
+      </React.Suspense>
     );
   }
 
