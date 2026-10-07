@@ -30,6 +30,11 @@ export const EVENT_PLANNER_COSTS: Record<string, number> = {
   "Full backup plan": 1200,
 };
 
+// Static pre-computed lowercased array to eliminate Object.entries() allocations and repeated .toLowerCase() calls in cost lookups
+const EVENT_PLANNER_COSTS_LOWER: Array<{ keyLower: string; cost: number }> = Object.entries(EVENT_PLANNER_COSTS).map(
+  ([key, cost]) => ({ keyLower: key.toLowerCase(), cost })
+);
+
 /**
  * Module 1: Money Has Rules (Tuckshop) Deterministic Tag Detection
  * Applies literal conditional thresholds from pedagogical design:
@@ -79,18 +84,36 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
       negativeMarginFound = true;
     }
 
-    // Check Stockout
+    // Check Stockout (Short-circuiting indexed loops to avoid array iterator allocations and redundant lowercasing)
     if ((res.missedSales && res.missedSales > 0) || (res.stockoutFrequency && res.stockoutFrequency > 0)) {
       stockoutFound = true;
     }
-    if (res.patterns && Array.isArray(res.patterns) && res.patterns.some((p: string) => p.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
+    if (!stockoutFound && Array.isArray(res.patterns)) {
+      for (let j = 0; j < res.patterns.length; j++) {
+        if (typeof res.patterns[j] === 'string' && res.patterns[j].toLowerCase().includes('stockout')) {
+          stockoutFound = true;
+          break;
+        }
+      }
     }
-    if (res.microSignals && Array.isArray(res.microSignals) && res.microSignals.some((m: string) => m.toLowerCase().includes('stockout') || m.toLowerCase().includes('sold out'))) {
-      stockoutFound = true;
+    if (!stockoutFound && Array.isArray(res.microSignals)) {
+      for (let j = 0; j < res.microSignals.length; j++) {
+        if (typeof res.microSignals[j] === 'string') {
+          const msLower = res.microSignals[j].toLowerCase();
+          if (msLower.includes('stockout') || msLower.includes('sold out')) {
+            stockoutFound = true;
+            break;
+          }
+        }
+      }
     }
-    if (res.secondaryInsights && Array.isArray(res.secondaryInsights) && res.secondaryInsights.some((s: string) => s.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
+    if (!stockoutFound && Array.isArray(res.secondaryInsights)) {
+      for (let j = 0; j < res.secondaryInsights.length; j++) {
+        if (typeof res.secondaryInsights[j] === 'string' && res.secondaryInsights[j].toLowerCase().includes('stockout')) {
+          stockoutFound = true;
+          break;
+        }
+      }
     }
 
     // Check Cash Lock: Inventory > 80% of assets AND cash < 150
@@ -180,14 +203,21 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
 }
 
 function getEventPlannerCost(item: string): number {
-  if (!item || item === 'None' || item.toLowerCase().includes('none') || item.toLowerCase().includes('no safety')) return 0;
+  if (!item) return 0;
   if (EVENT_PLANNER_COSTS[item] !== undefined) return EVENT_PLANNER_COSTS[item];
+
+  const itemLower = item.toLowerCase();
+  if (itemLower === 'none' || itemLower.includes('none') || itemLower.includes('no safety')) return 0;
+
   const match = item.match(/R([\d,]+)/i);
   if (match) {
     return parseInt(match[1].replace(/,/g, ''), 10) || 0;
   }
-  for (const [key, cost] of Object.entries(EVENT_PLANNER_COSTS)) {
-    if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
+
+  // Use pre-computed lowercased array to avoid Object.entries() allocations and redundant .toLowerCase() calls
+  for (let i = 0; i < EVENT_PLANNER_COSTS_LOWER.length; i++) {
+    const { keyLower, cost } = EVENT_PLANNER_COSTS_LOWER[i];
+    if (itemLower.includes(keyLower) || keyLower.includes(itemLower)) {
       return cost;
     }
   }
