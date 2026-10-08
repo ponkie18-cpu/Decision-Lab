@@ -179,18 +179,38 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
   return Array.from(tags);
 }
 
+// Fast-path memoization cache for item cost lookups to prevent repeated string lowercasing, regex, and O(N) entry iteration
+const eventPlannerCostCache = new Map<string, number>();
+
 function getEventPlannerCost(item: string): number {
-  if (!item || item === 'None' || item.toLowerCase().includes('none') || item.toLowerCase().includes('no safety')) return 0;
+  if (!item || item === 'None') return 0;
   if (EVENT_PLANNER_COSTS[item] !== undefined) return EVENT_PLANNER_COSTS[item];
+
+  const cached = eventPlannerCostCache.get(item);
+  if (cached !== undefined) return cached;
+
+  const lowerItem = item.toLowerCase();
+  if (lowerItem.includes('none') || lowerItem.includes('no safety')) {
+    eventPlannerCostCache.set(item, 0);
+    return 0;
+  }
+
   const match = item.match(/R([\d,]+)/i);
   if (match) {
-    return parseInt(match[1].replace(/,/g, ''), 10) || 0;
+    const cost = parseInt(match[1].replace(/,/g, ''), 10) || 0;
+    eventPlannerCostCache.set(item, cost);
+    return cost;
   }
+
   for (const [key, cost] of Object.entries(EVENT_PLANNER_COSTS)) {
-    if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
+    const lowerKey = key.toLowerCase();
+    if (lowerItem.includes(lowerKey) || lowerKey.includes(lowerItem)) {
+      eventPlannerCostCache.set(item, cost);
       return cost;
     }
   }
+
+  eventPlannerCostCache.set(item, 0);
   return 0;
 }
 
