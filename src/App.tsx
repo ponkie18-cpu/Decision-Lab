@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart3, 
@@ -46,6 +46,15 @@ import { calculateModule1Score, calculateModule3Score, generateIndividualReport 
 import Markdown from 'react-markdown';
 import { Sidebar } from './components/Sidebar';
 
+const EVENT_MODULE_COSTS: Record<string, number> = {
+  "None": 0,
+  "Basic setup": 500, "Proper setup": 1200, "Premium setup": 2000,
+  "Cheap DJ": 800, "Reliable DJ": 1500,
+  "Low food order": 800, "Balanced food order": 1500, "Large food order": 2300,
+  "Basic safety plan": 500, "Proper safety plan": 1000,
+  "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAdminProfile>(() => {
     return getCurrentSessionUser() || {
@@ -60,6 +69,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -455,16 +465,7 @@ export default function App() {
     }
   };
 
-  const costs: Record<string, number> = {
-    "None": 0,
-    "Basic setup": 500, "Proper setup": 1200, "Premium setup": 2000,
-    "Cheap DJ": 800, "Reliable DJ": 1500,
-    "Low food order": 800, "Balanced food order": 1500, "Large food order": 2300,
-    "Basic safety plan": 500, "Proper safety plan": 1000,
-    "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
-  };
-
-  const calculateRoundCost = () => {
+  const calculateRoundCost = useCallback(() => {
     let total = 0;
     if (isModule1) {
       const cR = parseInt(m1Decisions.chipsRestock) || 0;
@@ -478,16 +479,16 @@ export default function App() {
       if (m3Decisions.permit !== state.complianceState?.permit.level) total += M3_COSTS[m3Decisions.permit] || 0;
       if (m3Decisions.records !== state.complianceState?.records.level) total += M3_COSTS[m3Decisions.records] || 0;
     } else {
-      if (decisions.venue !== state.eventReadiness?.venue.level) total += costs[decisions.venue] || 0;
-      if (decisions.entertainment !== state.eventReadiness?.entertainment.level) total += costs[decisions.entertainment] || 0;
-      if (decisions.food !== state.eventReadiness?.food.level) total += costs[decisions.food] || 0;
-      if (decisions.safety !== state.eventReadiness?.safety.level) total += costs[decisions.safety] || 0;
-      if (decisions.backup !== state.eventReadiness?.backup.level) total += costs[decisions.backup] || 0;
+      if (decisions.venue !== state.eventReadiness?.venue.level) total += EVENT_MODULE_COSTS[decisions.venue] || 0;
+      if (decisions.entertainment !== state.eventReadiness?.entertainment.level) total += EVENT_MODULE_COSTS[decisions.entertainment] || 0;
+      if (decisions.food !== state.eventReadiness?.food.level) total += EVENT_MODULE_COSTS[decisions.food] || 0;
+      if (decisions.safety !== state.eventReadiness?.safety.level) total += EVENT_MODULE_COSTS[decisions.safety] || 0;
+      if (decisions.backup !== state.eventReadiness?.backup.level) total += EVENT_MODULE_COSTS[decisions.backup] || 0;
     }
     return total;
-  };
+  }, [isModule1, isModule3, m1Decisions, m3Decisions, decisions, state.complianceState, state.eventReadiness]);
 
-  const totalSpend = calculateRoundCost();
+  const totalSpend = useMemo(() => calculateRoundCost(), [calculateRoundCost]);
   
   const handleExecuteRound = async () => {
     setLoading(true);
@@ -811,7 +812,7 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin } as UserAdminProfile))}
       />
     );
   }
@@ -1159,7 +1160,7 @@ export default function App() {
                   icon={<MapPin size={12} />}
                   value={decisions.venue} 
                   options={["None", "Basic setup", "Proper setup", "Premium setup"]} 
-                  costs={costs}
+                  costs={EVENT_MODULE_COSTS}
                   currentLevel={state.eventReadiness?.venue.level}
                   onChange={(v) => handleDecisionChange('venue', v)} 
                 />
@@ -1168,7 +1169,7 @@ export default function App() {
                   icon={<Music size={12} />}
                   value={decisions.entertainment} 
                   options={["None", "Cheap DJ", "Reliable DJ"]} 
-                  costs={costs}
+                  costs={EVENT_MODULE_COSTS}
                   currentLevel={state.eventReadiness?.entertainment.level}
                   onChange={(v) => handleDecisionChange('entertainment', v)} 
                 />
@@ -1177,7 +1178,7 @@ export default function App() {
                   icon={<Utensils size={12} />}
                   value={decisions.food} 
                   options={["None", "Low food order", "Balanced food order", "Large food order"]} 
-                  costs={costs}
+                  costs={EVENT_MODULE_COSTS}
                   currentLevel={state.eventReadiness?.food.level}
                   onChange={(v) => handleDecisionChange('food', v)} 
                 />
@@ -1186,7 +1187,7 @@ export default function App() {
                   icon={<ShieldAlert size={12} />}
                   value={decisions.safety} 
                   options={["None", "Basic safety plan", "Proper safety plan"]} 
-                  costs={costs}
+                  costs={EVENT_MODULE_COSTS}
                   currentLevel={state.eventReadiness?.safety.level}
                   onChange={(v) => handleDecisionChange('safety', v)} 
                 />
@@ -1195,7 +1196,7 @@ export default function App() {
                   icon={<CloudRain size={12} />}
                   value={decisions.backup} 
                   options={["None", "Rain backup", "Supplier backup", "Full backup plan"]} 
-                  costs={costs}
+                  costs={EVENT_MODULE_COSTS}
                   currentLevel={state.eventReadiness?.backup.level}
                   onChange={(v) => handleDecisionChange('backup', v)} 
                 />

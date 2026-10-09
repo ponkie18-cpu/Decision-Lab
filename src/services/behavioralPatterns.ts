@@ -179,6 +179,11 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
   return Array.from(tags);
 }
 
+// Pre-computed lowercase cost entries for fast O(1) / O(N_fixed) substring lookups without array allocations
+const LOWER_EVENT_PLANNER_COSTS_ENTRIES = Object.entries(EVENT_PLANNER_COSTS).map(
+  ([key, cost]) => [key.toLowerCase(), cost] as const
+);
+
 function getEventPlannerCost(item: string): number {
   if (!item || item === 'None' || item.toLowerCase().includes('none') || item.toLowerCase().includes('no safety')) return 0;
   if (EVENT_PLANNER_COSTS[item] !== undefined) return EVENT_PLANNER_COSTS[item];
@@ -186,8 +191,10 @@ function getEventPlannerCost(item: string): number {
   if (match) {
     return parseInt(match[1].replace(/,/g, ''), 10) || 0;
   }
-  for (const [key, cost] of Object.entries(EVENT_PLANNER_COSTS)) {
-    if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
+  const itemLower = item.toLowerCase();
+  for (let i = 0; i < LOWER_EVENT_PLANNER_COSTS_ENTRIES.length; i++) {
+    const [keyLower, cost] = LOWER_EVENT_PLANNER_COSTS_ENTRIES[i];
+    if (itemLower.includes(keyLower) || keyLower.includes(itemLower)) {
       return cost;
     }
   }
