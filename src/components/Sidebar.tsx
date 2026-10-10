@@ -88,7 +88,12 @@ const CURRICULUM: CurriculumModule[] = [
   }
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
+// Bolt Optimization: Pre-filter static curriculum categories outside render loop to avoid array filtering on every render cycle
+const FOUNDATIONS_MODULES = CURRICULUM.filter(m => m.category === 'FOUNDATIONS');
+const APPLIED_MODULES = CURRICULUM.filter(m => m.category === 'APPLIED BUSINESS');
+
+// Bolt Optimization: Wrap Sidebar in React.memo to avoid re-rendering sidebar when parent App state (e.g., toasts, modals) updates
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
   const learningState = currentState.learningState;
   const completedCount = currentState.completedModules.length;
   const totalCount = CURRICULUM.length;
@@ -330,7 +335,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             <Circle size={8} fill="currentColor" className="text-blue-500" />
             Foundations
           </h3>
-          {CURRICULUM.filter(m => m.category === 'FOUNDATIONS').map((mod, i) => renderModuleCard(mod, i))}
+          {FOUNDATIONS_MODULES.map((mod, i) => renderModuleCard(mod, i))}
         </section>
 
         <section className="mb-6">
@@ -338,7 +343,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             <Circle size={8} fill="currentColor" className="text-slate-700" />
             Applied Business
           </h3>
-          {CURRICULUM.filter(m => m.category === 'APPLIED BUSINESS').map((mod, i) => renderModuleCard(mod, CURRICULUM.findIndex(cat => cat.id === mod.id)))}
+          {APPLIED_MODULES.map((mod, i) => renderModuleCard(mod, CURRICULUM.findIndex(cat => cat.id === mod.id)))}
         </section>
 
         <section>
@@ -437,4 +442,4 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
       </div>
     </div>
   );
-};
+});

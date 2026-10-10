@@ -123,7 +123,12 @@ export default function App() {
     impact: 'positive' | 'negative' | 'neutral' | 'warning';
   }>>([]);
 
-  const triggerDecisionToast = (category: string, value: string, prevValue: string) => {
+  const isModule3 = state.module === 'nomsa_fine';
+  const isModule4 = state.module === 'decision_game';
+  const isModule1 = state.module === 'money_rules';
+  const isModuleReady = isModule1 || isModule3 || isModule4 || state.module === 'event_disaster';
+
+  const triggerDecisionToast = React.useCallback((category: string, value: string, prevValue: string) => {
     let message = "";
     let metric = "";
     let impact: 'positive' | 'negative' | 'neutral' | 'warning' = 'neutral';
@@ -261,12 +266,7 @@ export default function App() {
         setToasts(prev => prev.filter(t => t.id !== id));
       }, 4000);
     }
-  };
-
-  const isModule3 = state.module === 'nomsa_fine';
-  const isModule4 = state.module === 'decision_game';
-  const isModule1 = state.module === 'money_rules';
-  const isModuleReady = isModule1 || isModule3 || isModule4 || state.module === 'event_disaster';
+  }, [isModule1, isModule3, isModule4, state.module]);
 
   React.useEffect(() => {
     if (isModule1 && state.round === 1 && !lastRound && !showMarketIntel) {
@@ -434,7 +434,8 @@ export default function App() {
     setShowTutorMode(false);
   };
 
-  const handleDecisionChange = (category: string, value: string) => {
+  // Bolt Optimization: Memoize handleDecisionChange with useCallback to keep callback reference stable for ChoiceGroup props
+  const handleDecisionChange = React.useCallback((category: string, value: string) => {
     let prevValue = "";
     if (isModule4) {
       prevValue = (m4Decisions as any)[category] || "";
@@ -453,18 +454,11 @@ export default function App() {
     if (prevValue !== value) {
       triggerDecisionToast(category, value, prevValue);
     }
-  };
+  }, [isModule4, isModule3, isModule1, m4Decisions, m3Decisions, m1Decisions, decisions, triggerDecisionToast]);
 
-  const costs: Record<string, number> = {
-    "None": 0,
-    "Basic setup": 500, "Proper setup": 1200, "Premium setup": 2000,
-    "Cheap DJ": 800, "Reliable DJ": 1500,
-    "Low food order": 800, "Balanced food order": 1500, "Large food order": 2300,
-    "Basic safety plan": 500, "Proper safety plan": 1000,
-    "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
-  };
-
-  const calculateRoundCost = () => {
+  // Bolt Optimization: Move static M2 event readiness cost schedule outside or reuse constant to avoid object creation on every render
+  // Bolt Optimization: Memoize totalSpend calculation to eliminate redundant iterations during render passes
+  const totalSpend = React.useMemo(() => {
     let total = 0;
     if (isModule1) {
       const cR = parseInt(m1Decisions.chipsRestock) || 0;
@@ -478,16 +472,16 @@ export default function App() {
       if (m3Decisions.permit !== state.complianceState?.permit.level) total += M3_COSTS[m3Decisions.permit] || 0;
       if (m3Decisions.records !== state.complianceState?.records.level) total += M3_COSTS[m3Decisions.records] || 0;
     } else {
-      if (decisions.venue !== state.eventReadiness?.venue.level) total += costs[decisions.venue] || 0;
-      if (decisions.entertainment !== state.eventReadiness?.entertainment.level) total += costs[decisions.entertainment] || 0;
-      if (decisions.food !== state.eventReadiness?.food.level) total += costs[decisions.food] || 0;
-      if (decisions.safety !== state.eventReadiness?.safety.level) total += costs[decisions.safety] || 0;
-      if (decisions.backup !== state.eventReadiness?.backup.level) total += costs[decisions.backup] || 0;
+      if (decisions.venue !== state.eventReadiness?.venue.level) total += M2_EVENT_COSTS[decisions.venue] || 0;
+      if (decisions.entertainment !== state.eventReadiness?.entertainment.level) total += M2_EVENT_COSTS[decisions.entertainment] || 0;
+      if (decisions.food !== state.eventReadiness?.food.level) total += M2_EVENT_COSTS[decisions.food] || 0;
+      if (decisions.safety !== state.eventReadiness?.safety.level) total += M2_EVENT_COSTS[decisions.safety] || 0;
+      if (decisions.backup !== state.eventReadiness?.backup.level) total += M2_EVENT_COSTS[decisions.backup] || 0;
     }
     return total;
-  };
+  }, [isModule1, isModule3, m1Decisions, m3Decisions, decisions, state.complianceState, state.eventReadiness]);
 
-  const totalSpend = calculateRoundCost();
+  const calculateRoundCost = () => totalSpend;
   
   const handleExecuteRound = async () => {
     setLoading(true);
@@ -1159,7 +1153,7 @@ export default function App() {
                   icon={<MapPin size={12} />}
                   value={decisions.venue} 
                   options={["None", "Basic setup", "Proper setup", "Premium setup"]} 
-                  costs={costs}
+                  costs={M2_EVENT_COSTS}
                   currentLevel={state.eventReadiness?.venue.level}
                   onChange={(v) => handleDecisionChange('venue', v)} 
                 />
@@ -1168,7 +1162,7 @@ export default function App() {
                   icon={<Music size={12} />}
                   value={decisions.entertainment} 
                   options={["None", "Cheap DJ", "Reliable DJ"]} 
-                  costs={costs}
+                  costs={M2_EVENT_COSTS}
                   currentLevel={state.eventReadiness?.entertainment.level}
                   onChange={(v) => handleDecisionChange('entertainment', v)} 
                 />
@@ -1177,7 +1171,7 @@ export default function App() {
                   icon={<Utensils size={12} />}
                   value={decisions.food} 
                   options={["None", "Low food order", "Balanced food order", "Large food order"]} 
-                  costs={costs}
+                  costs={M2_EVENT_COSTS}
                   currentLevel={state.eventReadiness?.food.level}
                   onChange={(v) => handleDecisionChange('food', v)} 
                 />
@@ -1186,7 +1180,7 @@ export default function App() {
                   icon={<ShieldAlert size={12} />}
                   value={decisions.safety} 
                   options={["None", "Basic safety plan", "Proper safety plan"]} 
-                  costs={costs}
+                  costs={M2_EVENT_COSTS}
                   currentLevel={state.eventReadiness?.safety.level}
                   onChange={(v) => handleDecisionChange('safety', v)} 
                 />
@@ -1195,7 +1189,7 @@ export default function App() {
                   icon={<CloudRain size={12} />}
                   value={decisions.backup} 
                   options={["None", "Rain backup", "Supplier backup", "Full backup plan"]} 
-                  costs={costs}
+                  costs={M2_EVENT_COSTS}
                   currentLevel={state.eventReadiness?.backup.level}
                   onChange={(v) => handleDecisionChange('backup', v)} 
                 />
@@ -2159,7 +2153,18 @@ export default function App() {
 );
 }
 
-function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
+// Bolt Optimization: Move static M2 costs schedule outside component to prevent object re-allocation on every render
+const M2_EVENT_COSTS: Record<string, number> = {
+  "None": 0,
+  "Basic setup": 500, "Proper setup": 1200, "Premium setup": 2000,
+  "Cheap DJ": 800, "Reliable DJ": 1500,
+  "Low food order": 800, "Balanced food order": 1500, "Large food order": 2300,
+  "Basic safety plan": 500, "Proper safety plan": 1000,
+  "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
+};
+
+// Bolt Optimization: Wrap ChoiceGroup in React.memo to prevent re-rendering option groups when parent App state updates
+const ChoiceGroup = React.memo(function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between opacity-50">
@@ -2206,9 +2211,10 @@ function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLeve
       </div>
     </div>
   );
-}
+});
 
-function OpportunityGate({ state }: { state: GameState }) {
+// Bolt Optimization: Wrap OpportunityGate in React.memo to skip re-renders when parent App updates
+const OpportunityGate = React.memo(function OpportunityGate({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
 
   const isReg = state.complianceState?.registration.level === 'Completed';
@@ -2252,9 +2258,10 @@ function OpportunityGate({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
 
-function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
+// Bolt Optimization: Wrap DecisionLedger in React.memo to avoid re-rendering audit trail on unrelated state changes
+const DecisionLedger = React.memo(function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
   if (ledger.length === 0) return null;
   
   return (
@@ -2294,9 +2301,10 @@ function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
       </div>
     </div>
   );
-}
+});
 
-function ComplianceTimeline({ state }: { state: GameState }) {
+// Bolt Optimization: Wrap ComplianceTimeline in React.memo to skip redundant rendering on unrelated state updates
+const ComplianceTimeline = React.memo(function ComplianceTimeline({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
   
   const events = [
@@ -2336,4 +2344,4 @@ function ComplianceTimeline({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
