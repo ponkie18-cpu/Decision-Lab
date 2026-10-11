@@ -25,7 +25,7 @@ import {
   Minus
 } from 'lucide-react';
 import { INITIAL_STATE, INITIAL_STATE_MODULE_1, INITIAL_STATE_MODULE_2, INITIAL_STATE_MODULE_3, INITIAL_STATE_MODULE_4, RoundRecord, GameState, Decisions, ModuleType, LearningState, M3_COSTS, DecisionLedgerEntry, ModuleRun } from './types';
-import { UserAdminProfile } from './types/admin';
+import { UserAdminProfile, AdultParticipantProfile } from './types/admin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { RegistrationForm } from './components/auth/RegistrationForm';
 import { LoginForm } from './components/auth/LoginForm';
@@ -60,6 +60,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -811,7 +812,11 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => {
+          if (prev.isMinorCohort) return prev;
+          const adult = prev as AdultParticipantProfile;
+          return { ...adult, isAdmin: !adult.isAdmin };
+        })}
       />
     );
   }
