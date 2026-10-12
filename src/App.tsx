@@ -60,6 +60,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -123,7 +124,12 @@ export default function App() {
     impact: 'positive' | 'negative' | 'neutral' | 'warning';
   }>>([]);
 
-  const triggerDecisionToast = (category: string, value: string, prevValue: string) => {
+  const isModule3 = state.module === 'nomsa_fine';
+  const isModule4 = state.module === 'decision_game';
+  const isModule1 = state.module === 'money_rules';
+  const isModuleReady = isModule1 || isModule3 || isModule4 || state.module === 'event_disaster';
+
+  const triggerDecisionToast = React.useCallback((category: string, value: string, prevValue: string) => {
     let message = "";
     let metric = "";
     let impact: 'positive' | 'negative' | 'neutral' | 'warning' = 'neutral';
@@ -261,12 +267,7 @@ export default function App() {
         setToasts(prev => prev.filter(t => t.id !== id));
       }, 4000);
     }
-  };
-
-  const isModule3 = state.module === 'nomsa_fine';
-  const isModule4 = state.module === 'decision_game';
-  const isModule1 = state.module === 'money_rules';
-  const isModuleReady = isModule1 || isModule3 || isModule4 || state.module === 'event_disaster';
+  }, [isModule1, state.module, isModule3, isModule4]);
 
   React.useEffect(() => {
     if (isModule1 && state.round === 1 && !lastRound && !showMarketIntel) {
@@ -326,7 +327,7 @@ export default function App() {
     initLearnerSession();
   }, [state.module]);
 
-  const switchModule = (mod: ModuleType, force = false) => {
+  const switchModule = React.useCallback((mod: ModuleType, force = false) => {
     // Lock check
     const status = learningState.moduleStatus[mod] || 'locked';
     const isReplay = state.module === mod;
@@ -432,9 +433,9 @@ export default function App() {
     });
     setLastRound(null);
     setShowTutorMode(false);
-  };
+  }, [state.module, state.round, state.completedModules, learningState]);
 
-  const handleDecisionChange = (category: string, value: string) => {
+  const handleDecisionChange = React.useCallback((category: string, value: string) => {
     let prevValue = "";
     if (isModule4) {
       prevValue = (m4Decisions as any)[category] || "";
@@ -453,18 +454,19 @@ export default function App() {
     if (prevValue !== value) {
       triggerDecisionToast(category, value, prevValue);
     }
-  };
+  }, [isModule4, isModule3, isModule1, m4Decisions, m3Decisions, m1Decisions, decisions, triggerDecisionToast]);
 
-  const costs: Record<string, number> = {
+  const costs: Record<string, number> = React.useMemo(() => ({
     "None": 0,
     "Basic setup": 500, "Proper setup": 1200, "Premium setup": 2000,
     "Cheap DJ": 800, "Reliable DJ": 1500,
     "Low food order": 800, "Balanced food order": 1500, "Large food order": 2300,
     "Basic safety plan": 500, "Proper safety plan": 1000,
     "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
-  };
+  }), []);
 
-  const calculateRoundCost = () => {
+  // Performance Optimization: Memoize round cost calculation to avoid recalculation on unrelated renders.
+  const calculateRoundCost = React.useCallback(() => {
     let total = 0;
     if (isModule1) {
       const cR = parseInt(m1Decisions.chipsRestock) || 0;
@@ -485,9 +487,9 @@ export default function App() {
       if (decisions.backup !== state.eventReadiness?.backup.level) total += costs[decisions.backup] || 0;
     }
     return total;
-  };
+  }, [isModule1, isModule3, m1Decisions, m3Decisions, decisions, state.complianceState, state.eventReadiness, costs]);
 
-  const totalSpend = calculateRoundCost();
+  const totalSpend = React.useMemo(() => calculateRoundCost(), [calculateRoundCost]);
   
   const handleExecuteRound = async () => {
     setLoading(true);
@@ -811,23 +813,32 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => {
+          if (prev.isMinorCohort) return prev;
+          return { ...(prev as import('./types/admin').AdultParticipantProfile), isAdmin: !prev.isAdmin };
+        })}
       />
     );
   }
+
+  const handleViewReports = React.useCallback(() => {
+    if (learningState.history.length > 0) {
+      setCurrentRunReport(generateIndividualReport(learningState.history[0]));
+      setShowReport(true);
+    }
+  }, [learningState.history]);
+
+  const handleOpenAdminPortal = React.useCallback(() => {
+    setAuthRoute('admin');
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#06080A] text-slate-200 overflow-hidden selection:bg-blue-500/30">
       <Sidebar 
         currentState={state} 
         onSelectModule={switchModule} 
-        onViewReports={() => {
-          if (learningState.history.length > 0) {
-            setCurrentRunReport(generateIndividualReport(learningState.history[0]));
-            setShowReport(true);
-          }
-        }}
-        onOpenAdminPortal={() => setAuthRoute('admin')}
+        onViewReports={handleViewReports}
+        onOpenAdminPortal={handleOpenAdminPortal}
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -2159,7 +2170,8 @@ export default function App() {
 );
 }
 
-function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
+// Performance Optimization: ChoiceGroup is memoized to prevent re-rendering when other decisions or App state change.
+const ChoiceGroup = React.memo(function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between opacity-50">
@@ -2206,9 +2218,10 @@ function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLeve
       </div>
     </div>
   );
-}
+});
 
-function OpportunityGate({ state }: { state: GameState }) {
+// Performance Optimization: OpportunityGate is memoized to avoid recalculation on unrelated renders.
+const OpportunityGate = React.memo(function OpportunityGate({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
 
   const isReg = state.complianceState?.registration.level === 'Completed';
@@ -2252,9 +2265,10 @@ function OpportunityGate({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
 
-function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
+// Performance Optimization: DecisionLedger is memoized to avoid re-rendering audit trail unless ledger updates.
+const DecisionLedger = React.memo(function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
   if (ledger.length === 0) return null;
   
   return (
@@ -2294,9 +2308,10 @@ function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
       </div>
     </div>
   );
-}
+});
 
-function ComplianceTimeline({ state }: { state: GameState }) {
+// Performance Optimization: ComplianceTimeline is memoized to prevent timeline re-renders on non-state changes.
+const ComplianceTimeline = React.memo(function ComplianceTimeline({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
   
   const events = [
@@ -2336,4 +2351,4 @@ function ComplianceTimeline({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
