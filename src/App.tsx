@@ -60,6 +60,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -326,7 +327,7 @@ export default function App() {
     initLearnerSession();
   }, [state.module]);
 
-  const switchModule = (mod: ModuleType, force = false) => {
+  const switchModule = React.useCallback((mod: ModuleType, force = false) => {
     // Lock check
     const status = learningState.moduleStatus[mod] || 'locked';
     const isReplay = state.module === mod;
@@ -432,7 +433,18 @@ export default function App() {
     });
     setLastRound(null);
     setShowTutorMode(false);
-  };
+  }, [learningState, state.completedModules, state.module, state.round]);
+
+  const handleViewReports = React.useCallback(() => {
+    if (learningState.history.length > 0) {
+      setCurrentRunReport(generateIndividualReport(learningState.history[0]));
+      setShowReport(true);
+    }
+  }, [learningState.history]);
+
+  const handleOpenAdminPortal = React.useCallback(() => {
+    setAuthRoute('admin');
+  }, []);
 
   const handleDecisionChange = (category: string, value: string) => {
     let prevValue = "";
@@ -811,7 +823,7 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin } as UserAdminProfile))}
       />
     );
   }
@@ -821,13 +833,8 @@ export default function App() {
       <Sidebar 
         currentState={state} 
         onSelectModule={switchModule} 
-        onViewReports={() => {
-          if (learningState.history.length > 0) {
-            setCurrentRunReport(generateIndividualReport(learningState.history[0]));
-            setShowReport(true);
-          }
-        }}
-        onOpenAdminPortal={() => setAuthRoute('admin')}
+        onViewReports={handleViewReports}
+        onOpenAdminPortal={handleOpenAdminPortal}
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -2159,7 +2166,9 @@ export default function App() {
 );
 }
 
-function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
+// Performance Optimization: Wrap ChoiceGroup in React.memo to skip re-rendering option controls
+// when unrelated parent state updates occur (e.g. toast notification auto-dismiss timer ticks).
+const ChoiceGroup = React.memo(function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLevel, deadline, round, help }: { label: string; options: string[]; costs: Record<string, number>; value: string; onChange: (v: string) => void; icon?: React.ReactNode; currentLevel?: string; deadline?: number; round?: number; help?: string }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between opacity-50">
@@ -2206,9 +2215,10 @@ function ChoiceGroup({ label, options, costs, value, onChange, icon, currentLeve
       </div>
     </div>
   );
-}
+});
+ChoiceGroup.displayName = 'ChoiceGroup';
 
-function OpportunityGate({ state }: { state: GameState }) {
+const OpportunityGate = React.memo(function OpportunityGate({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
 
   const isReg = state.complianceState?.registration.level === 'Completed';
@@ -2252,9 +2262,9 @@ function OpportunityGate({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
 
-function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
+const DecisionLedger = React.memo(function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
   if (ledger.length === 0) return null;
   
   return (
@@ -2294,9 +2304,9 @@ function DecisionLedger({ ledger }: { ledger: DecisionLedgerEntry[] }) {
       </div>
     </div>
   );
-}
+});
 
-function ComplianceTimeline({ state }: { state: GameState }) {
+const ComplianceTimeline = React.memo(function ComplianceTimeline({ state }: { state: GameState }) {
   if (state.module !== 'nomsa_fine') return null;
   
   const events = [
@@ -2336,4 +2346,7 @@ function ComplianceTimeline({ state }: { state: GameState }) {
       </div>
     </div>
   );
-}
+});
+OpportunityGate.displayName = 'OpportunityGate';
+DecisionLedger.displayName = 'DecisionLedger';
+ComplianceTimeline.displayName = 'ComplianceTimeline';

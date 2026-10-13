@@ -14,7 +14,7 @@ const ai = new GoogleGenAI({ apiKey });
 async function runInteraction() {
   const prompt = process.env.GEMINI_PROMPT || "Summarize recent developments in generative AI decision intelligence.";
 
-  const interaction = await ai.interactions.create({
+  const interaction: any = await ai.interactions.create({
     model: "gemini-3.8-flash",
     input: prompt,
     tools: [

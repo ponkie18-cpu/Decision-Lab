@@ -88,7 +88,10 @@ const CURRICULUM: CurriculumModule[] = [
   }
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
+// Performance Optimization: Memoize Sidebar component to prevent costly re-renders of the entire
+// sidebar navigation tree, curriculum progress bars, and performance signal metrics on unrelated state
+// changes in App.tsx (e.g., 4-second toast timer updates, modal toggles, loading state transitions).
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
   const learningState = currentState.learningState;
   const completedCount = currentState.completedModules.length;
   const totalCount = CURRICULUM.length;
@@ -437,4 +440,5 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
       </div>
     </div>
   );
-};
+});
+Sidebar.displayName = 'Sidebar';
