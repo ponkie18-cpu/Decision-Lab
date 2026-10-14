@@ -464,17 +464,18 @@ export async function getCohortAggregateReport(
     const runsRef = collection(db, 'moduleRuns');
     const runsSnap = await getDocs(runsRef);
 
-    // Group runs by learnerCode
+    // Group runs by learnerCode - execute subcollection fetches concurrently via Promise.all
+    // to eliminate sequential network requests (O(N * latency) -> O(latency)).
     const learnerRunsMap = new Map<string, Array<{ id: string; moduleId: any; attemptType: string; score: any; rounds: RoundRecord[] }>>();
 
-    for (const runDoc of runsSnap.docs) {
+    await Promise.all(runsSnap.docs.map(async (runDoc) => {
       const runData = runDoc.data();
       const code = runData.learnerCode || runData.userId;
-      if (!code) continue;
+      if (!code) return;
 
       let rounds: RoundRecord[] = runData.rounds || [];
       if (!rounds || rounds.length === 0) {
-        // Fetch subcollection rounds
+        // Fetch subcollection rounds concurrently across all runs
         try {
           const subRoundsSnap = await getDocs(collection(db, 'moduleRuns', runDoc.id, 'rounds'));
           rounds = subRoundsSnap.docs.map(rDoc => ({
@@ -496,7 +497,7 @@ export async function getCohortAggregateReport(
         rounds
       });
       learnerRunsMap.set(code, existing);
-    }
+    }));
 
     // 1. Tag aggregation across all real learners and runs
     const tagCountMap = new Map<string, number>();
