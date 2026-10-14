@@ -263,7 +263,9 @@ export async function backfillAuditLogsFromRuns(maxNeeded: number = 20): Promise
 
   const entries: AuditLogEntry[] = [];
 
-  for (const runDoc of runsSnap.docs) {
+  // Fetch rounds subcollections concurrently via Promise.all
+  // to avoid sequential network waterfall overhead (O(N * latency) -> O(latency)).
+  await Promise.all(runsSnap.docs.map(async (runDoc) => {
     const runData = runDoc.data();
     const learnerCode = runData.learnerCode || runData.userId || 'ANON';
     const cohortId = runData.cohortId || 'school-pilot-2026-tuckshop';
@@ -318,7 +320,7 @@ export async function backfillAuditLogsFromRuns(maxNeeded: number = 20): Promise
         writtenAt: serverTimestamp()
       }).catch(() => {});
     });
-  }
+  }));
 
   entries.sort((a, b) => b.createdAtMs - a.createdAtMs);
   return entries.slice(0, maxNeeded);
