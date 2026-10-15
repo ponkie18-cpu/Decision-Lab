@@ -25,11 +25,12 @@ import {
   Minus
 } from 'lucide-react';
 import { INITIAL_STATE, INITIAL_STATE_MODULE_1, INITIAL_STATE_MODULE_2, INITIAL_STATE_MODULE_3, INITIAL_STATE_MODULE_4, RoundRecord, GameState, Decisions, ModuleType, LearningState, M3_COSTS, DecisionLedgerEntry, ModuleRun } from './types';
-import { UserAdminProfile } from './types/admin';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { RegistrationForm } from './components/auth/RegistrationForm';
-import { LoginForm } from './components/auth/LoginForm';
-import { LearnerLogin } from './components/auth/LearnerLogin';
+import { UserAdminProfile, AdultParticipantProfile } from './types/admin';
+// Lazy-loaded routes for code splitting & faster initial page load
+const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const RegistrationForm = React.lazy(() => import('./components/auth/RegistrationForm').then(m => ({ default: m.RegistrationForm })));
+const LoginForm = React.lazy(() => import('./components/auth/LoginForm').then(m => ({ default: m.LoginForm })));
+const LearnerLogin = React.lazy(() => import('./components/auth/LearnerLogin').then(m => ({ default: m.LearnerLogin })));
 import { getCurrentSessionUser, logoutUser } from './services/authService';
 import { 
   validateLearnerConsent, 
@@ -60,6 +61,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -705,13 +707,15 @@ export default function App() {
   // Route 0: Learner Anonymous Access Portal (POPIA & Minor Safe)
   if (authRoute === 'learner_login') {
     return (
-      <LearnerLogin
-        onValidated={(learner) => {
-          setActiveLearner(learner);
-          setAuthRoute('dashboard');
-        }}
-        onOpenFacilitatorPortal={() => setAuthRoute('login')}
-      />
+      <React.Suspense fallback={<div className="bg-[#0B0F19] min-h-screen flex items-center justify-center text-slate-400 font-mono text-xs">Loading Learner Portal...</div>}>
+        <LearnerLogin
+          onValidated={(learner) => {
+            setActiveLearner(learner);
+            setAuthRoute('dashboard');
+          }}
+          onOpenFacilitatorPortal={() => setAuthRoute('login')}
+        />
+      </React.Suspense>
     );
   }
 
@@ -742,17 +746,19 @@ export default function App() {
           </div>
         </header>
 
-        <RegistrationForm
-          onSuccess={(registeredUser) => {
-            setCurrentUser(registeredUser);
-            if (registeredUser.isAdmin) {
-              setAuthRoute('admin');
-            } else {
-              setAuthRoute('dashboard');
-            }
-          }}
-          onSwitchToLogin={() => setAuthRoute('login')}
-        />
+        <React.Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400 font-mono text-xs">Loading Registration...</div>}>
+          <RegistrationForm
+            onSuccess={(registeredUser) => {
+              setCurrentUser(registeredUser);
+              if (registeredUser.isAdmin) {
+                setAuthRoute('admin');
+              } else {
+                setAuthRoute('dashboard');
+              }
+            }}
+            onSwitchToLogin={() => setAuthRoute('login')}
+          />
+        </React.Suspense>
       </div>
     );
   }
@@ -784,17 +790,19 @@ export default function App() {
           </div>
         </header>
 
-        <LoginForm
-          onSuccess={(loggedInUser) => {
-            setCurrentUser(loggedInUser);
-            if (loggedInUser.isAdmin) {
-              setAuthRoute('admin');
-            } else {
-              setAuthRoute('dashboard');
-            }
-          }}
-          onSwitchToRegister={() => setAuthRoute('register')}
-        />
+        <React.Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400 font-mono text-xs">Loading Login...</div>}>
+          <LoginForm
+            onSuccess={(loggedInUser) => {
+              setCurrentUser(loggedInUser);
+              if (loggedInUser.isAdmin) {
+                setAuthRoute('admin');
+              } else {
+                setAuthRoute('dashboard');
+              }
+            }}
+            onSwitchToRegister={() => setAuthRoute('register')}
+          />
+        </React.Suspense>
       </div>
     );
   }
@@ -802,17 +810,23 @@ export default function App() {
   // Route 3: Admin Portal
   if (authRoute === 'admin') {
     return (
-      <AdminDashboard
-        currentUser={currentUser}
-        liveSimulationRun={{
-          id: 'run_sim_live',
-          moduleId: state.module,
-          rounds: state.history,
-          timestamp: new Date().toISOString()
-        }}
-        onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
-      />
+      <React.Suspense fallback={<div className="bg-[#0B0F19] min-h-screen flex items-center justify-center text-indigo-400 font-mono text-xs">Loading Admin Portal & Analytics...</div>}>
+        <AdminDashboard
+          currentUser={currentUser}
+          liveSimulationRun={{
+            id: 'run_sim_live',
+            moduleId: state.module,
+            rounds: state.history,
+            timestamp: new Date().toISOString()
+          }}
+          onExitAdmin={() => setAuthRoute('dashboard')}
+          onToggleAdminRole={() => setCurrentUser(prev => {
+            if (prev.isMinorCohort) return prev;
+            const adultPrev = prev as AdultParticipantProfile;
+            return { ...adultPrev, isAdmin: !adultPrev.isAdmin };
+          })}
+        />
+      </React.Suspense>
     );
   }
 
