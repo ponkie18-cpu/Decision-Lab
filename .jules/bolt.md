@@ -1,0 +1,3 @@
+## 2025-05-18 - Heavy Admin & Chart Dependencies Monolith Bundle
+**Learning:** Monolithic eager imports of `AdminDashboard` in `App.tsx` forced heavy dependencies (`recharts`, admin analytics, auth modals) into the primary entry bundle (~1.9 MB uncompressed / 519 kB gzipped), despite standard learners never accessing the admin portal on startup.
+**Action:** Use `React.lazy` / `Suspense` route code-splitting for non-critical views (`AdminDashboard`, `LoginForm`, `RegistrationForm`, `LearnerLogin`) and Rollup `manualChunks` in `vite.config.ts` for heavy vendor libraries (`recharts`, `firebase`, `react-markdown`).
