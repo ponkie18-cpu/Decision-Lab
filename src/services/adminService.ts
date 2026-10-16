@@ -123,11 +123,18 @@ const COHORT_CACHE_TTL_MS = 60 * 1000; // 60-second in-memory cache TTL
  * 2. Active run cohort verification (if run is tagged with a registered school pilot cohort).
  * 3. Namespace format validation (canonical minor learner code pattern: PREFIX-YEAR-XXX or PREFIX-VALIDATION-XXX).
  */
+// Performance Optimization: In-memory lookup cache to eliminate repeated Firestore getDoc network calls
+const minorLearnerCache = new Map<string, { isMinor: boolean; cohortId?: string }>();
+
 export async function isAffirmativeMinorLearner(
   identifier: string,
   liveRun?: ModuleRun
 ): Promise<{ isMinor: boolean; cohortId?: string }> {
   const cleanId = identifier.trim();
+
+  if (minorLearnerCache.has(cleanId)) {
+    return minorLearnerCache.get(cleanId)!;
+  }
 
   // 1. Authoritative Firestore 'learners' lookup - affirmative check
   try {
@@ -138,22 +145,27 @@ export async function isAffirmativeMinorLearner(
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
-      return {
+      const result = {
         isMinor: true,
         cohortId: data.cohortId || 'school-pilot-2026'
       };
+      minorLearnerCache.set(cleanId, result);
+      return result;
     }
   } catch (err) {
+    // Note: Do not cache transient Firestore network errors so retry can succeed later
     console.warn("Firestore learner existence check fallback:", err);
   }
 
   // 2. Active simulation run cohort tag affirmative check
   const runCohortId = (liveRun as any)?.cohortId;
   if (runCohortId && (runCohortId.startsWith('school-pilot') || runCohortId.includes('school'))) {
-    return {
+    const result = {
       isMinor: true,
       cohortId: runCohortId
     };
+    minorLearnerCache.set(cleanId, result);
+    return result;
   }
 
   // 3. Canonical minor learner code namespace convention
@@ -163,13 +175,17 @@ export async function isAffirmativeMinorLearner(
                            /^(TUCK|EVENT|NOMSA|GAME|RESUME|SCHOOL)-/i.test(cleanId);
 
   if (isMinorNamespace) {
-    return {
+    const result = {
       isMinor: true,
       cohortId: runCohortId || 'school-pilot-2026'
     };
+    minorLearnerCache.set(cleanId, result);
+    return result;
   }
 
-  return { isMinor: false };
+  const result = { isMinor: false };
+  minorLearnerCache.set(cleanId, result);
+  return result;
 }
 
 /**
