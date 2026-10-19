@@ -88,8 +88,23 @@ const CURRICULUM: CurriculumModule[] = [
   }
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
+/**
+ * Sidebar Component
+ * Memoized with React.memo to prevent unnecessary re-renders when parent App state changes
+ * (e.g. decision toast timer ticks, modal state toggles, form input changes).
+ */
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
   const learningState = currentState.learningState;
+
+  // Performance optimization: memoize verified and unverified assets calculation
+  // to avoid re-filtering the assets array on every sidebar re-render.
+  const verifiedAssets = React.useMemo(() => {
+    return learningState?.assets.filter(a => a.status === 'Verified') || [];
+  }, [learningState?.assets]);
+
+  const unverifiedAssets = React.useMemo(() => {
+    return learningState?.assets.filter(a => a.status !== 'Verified') || [];
+  }, [learningState?.assets]);
   const completedCount = currentState.completedModules.length;
   const totalCount = CURRICULUM.length;
   const globalProgress = (completedCount / totalCount) * 100;
@@ -350,12 +365,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             {/* Verified Assets */}
             <div className="space-y-1.5">
               <span className="text-[7px] text-emerald-500 uppercase font-black tracking-widest ml-1">Verified Assets</span>
-              {learningState?.assets.filter(a => a.status === 'Verified').length === 0 ? (
+              {verifiedAssets.length === 0 ? (
                  <div className="p-2 border border-dashed border-slate-800 rounded-sm text-center">
                    <p className="text-[7px] text-slate-700 uppercase font-bold italic">No verified records</p>
                  </div>
               ) : (
-                learningState?.assets.filter(a => a.status === 'Verified').map(asset => (
+                verifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800 rounded-sm hover:bg-slate-900 transition-colors group">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-300">{asset.name}</span>
@@ -368,10 +383,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             </div>
 
             {/* Needs Improvement */}
-            {learningState?.assets.some(a => a.status !== 'Verified') && (
+            {unverifiedAssets.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[7px] text-amber-500 uppercase font-black tracking-widest ml-1">Needs Improvement</span>
-                {learningState?.assets.filter(a => a.status !== 'Verified').map(asset => (
+                {unverifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800/50 rounded-sm hover:bg-slate-900 transition-colors group opacity-70 hover:opacity-100">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-400 italic line-through decoration-slate-700">{asset.name}</span>
@@ -437,4 +452,4 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
       </div>
     </div>
   );
-};
+});
