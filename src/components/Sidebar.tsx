@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { 
   CheckCircle2, 
@@ -33,6 +33,7 @@ interface CurriculumModule {
   rounds: number;
   unit: 'Day' | 'Month' | 'Level' | 'Round';
   objectives?: string[];
+  curriculumIndex: number;
 }
 
 const CURRICULUM: CurriculumModule[] = [
@@ -44,7 +45,8 @@ const CURRICULUM: CurriculumModule[] = [
     icon: <BookOpen size={14} />,
     rounds: 12,
     unit: 'Round',
-    objectives: ['Money tracking', 'Budgeting basics', 'Flow control']
+    objectives: ['Money tracking', 'Budgeting basics', 'Flow control'],
+    curriculumIndex: 0
   },
   {
     id: 'event_disaster',
@@ -54,7 +56,8 @@ const CURRICULUM: CurriculumModule[] = [
     icon: <ShieldCheck size={14} />,
     rounds: 5,
     unit: 'Day',
-    objectives: ['Risk assessment', 'Resource allocation', 'Contingency planning']
+    objectives: ['Risk assessment', 'Resource allocation', 'Contingency planning'],
+    curriculumIndex: 1
   },
   {
     id: 'nomsa_fine',
@@ -64,7 +67,8 @@ const CURRICULUM: CurriculumModule[] = [
     icon: <AlertTriangle size={14} />,
     rounds: 6,
     unit: 'Month',
-    objectives: ['Compliance rules', 'Penalty management', 'Funding readiness']
+    objectives: ['Compliance rules', 'Penalty management', 'Funding readiness'],
+    curriculumIndex: 2
   },
   {
     id: 'decision_game',
@@ -74,7 +78,8 @@ const CURRICULUM: CurriculumModule[] = [
     icon: <Target size={14} />,
     rounds: 15,
     unit: 'Round',
-    objectives: ['Strategic pricing', 'Trust building', 'Bargaining power']
+    objectives: ['Strategic pricing', 'Trust building', 'Bargaining power'],
+    curriculumIndex: 3
   },
   {
     id: 'strategy',
@@ -84,15 +89,24 @@ const CURRICULUM: CurriculumModule[] = [
     icon: <TrendingUp size={14} />,
     rounds: 5,
     unit: 'Level',
-    objectives: ['Market positioning', 'Competitive advantage', 'Vision alignment']
+    objectives: ['Market positioning', 'Competitive advantage', 'Vision alignment'],
+    curriculumIndex: 4
   }
 ];
+
+// Pre-compute categorized modules at top-level module scope (evaluated once on load, zero render overhead)
+const FOUNDATIONS_MODULES = CURRICULUM.filter(m => m.category === 'FOUNDATIONS');
+const APPLIED_BUSINESS_MODULES = CURRICULUM.filter(m => m.category === 'APPLIED BUSINESS');
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
   const learningState = currentState.learningState;
   const completedCount = currentState.completedModules.length;
   const totalCount = CURRICULUM.length;
   const globalProgress = (completedCount / totalCount) * 100;
+
+  // Memoized verified and unverified user assets to avoid filtering array on every render
+  const verifiedAssets = useMemo(() => learningState?.assets.filter(a => a.status === 'Verified') || [], [learningState?.assets]);
+  const unverifiedAssets = useMemo(() => learningState?.assets.filter(a => a.status !== 'Verified') || [], [learningState?.assets]);
 
   const currentModuleData = CURRICULUM.find(m => m.id === currentState.module);
   const currentSignal = learningState?.moduleSignals[currentState.module];
@@ -330,7 +344,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             <Circle size={8} fill="currentColor" className="text-blue-500" />
             Foundations
           </h3>
-          {CURRICULUM.filter(m => m.category === 'FOUNDATIONS').map((mod, i) => renderModuleCard(mod, i))}
+          {FOUNDATIONS_MODULES.map((mod, i) => renderModuleCard(mod, i))}
         </section>
 
         <section className="mb-6">
@@ -338,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             <Circle size={8} fill="currentColor" className="text-slate-700" />
             Applied Business
           </h3>
-          {CURRICULUM.filter(m => m.category === 'APPLIED BUSINESS').map((mod, i) => renderModuleCard(mod, CURRICULUM.findIndex(cat => cat.id === mod.id)))}
+          {APPLIED_BUSINESS_MODULES.map((mod) => renderModuleCard(mod, mod.curriculumIndex))}
         </section>
 
         <section>
@@ -350,12 +364,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             {/* Verified Assets */}
             <div className="space-y-1.5">
               <span className="text-[7px] text-emerald-500 uppercase font-black tracking-widest ml-1">Verified Assets</span>
-              {learningState?.assets.filter(a => a.status === 'Verified').length === 0 ? (
+              {verifiedAssets.length === 0 ? (
                  <div className="p-2 border border-dashed border-slate-800 rounded-sm text-center">
                    <p className="text-[7px] text-slate-700 uppercase font-bold italic">No verified records</p>
                  </div>
               ) : (
-                learningState?.assets.filter(a => a.status === 'Verified').map(asset => (
+                verifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800 rounded-sm hover:bg-slate-900 transition-colors group">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-300">{asset.name}</span>
@@ -368,10 +382,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             </div>
 
             {/* Needs Improvement */}
-            {learningState?.assets.some(a => a.status !== 'Verified') && (
+            {unverifiedAssets.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[7px] text-amber-500 uppercase font-black tracking-widest ml-1">Needs Improvement</span>
-                {learningState?.assets.filter(a => a.status !== 'Verified').map(asset => (
+                {unverifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800/50 rounded-sm hover:bg-slate-900 transition-colors group opacity-70 hover:opacity-100">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-400 italic line-through decoration-slate-700">{asset.name}</span>
