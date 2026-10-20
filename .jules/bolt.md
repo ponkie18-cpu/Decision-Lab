@@ -1,0 +1,3 @@
+## 2026-10-20 - [Sidebar Curriculum and Asset Rendering Optimization]
+**Learning:** React component render cycles were performing repetitive O(N) array filtering on static data constants (`CURRICULUM.filter`) as well as array lookups (`CURRICULUM.findIndex`) and repeated `learningState.assets` filter calls on every frame. Pre-computing static category slices at module level and memoizing asset filters with `useMemo` eliminates redundant operations on every render frame.
+**Action:** Always pre-compute static array slices at module scope rather than inside `useMemo` in React components, and memoize state-dependent list filtering to keep re-renders fast.
