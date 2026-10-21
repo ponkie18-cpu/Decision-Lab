@@ -467,14 +467,14 @@ export async function getCohortAggregateReport(
     // Group runs by learnerCode
     const learnerRunsMap = new Map<string, Array<{ id: string; moduleId: any; attemptType: string; score: any; rounds: RoundRecord[] }>>();
 
-    for (const runDoc of runsSnap.docs) {
+    // Parallelize subcollection queries with Promise.all to eliminate N+1 sequential network waterfall
+    const runPromises = runsSnap.docs.map(async (runDoc) => {
       const runData = runDoc.data();
       const code = runData.learnerCode || runData.userId;
-      if (!code) continue;
+      if (!code) return null;
 
       let rounds: RoundRecord[] = runData.rounds || [];
       if (!rounds || rounds.length === 0) {
-        // Fetch subcollection rounds
         try {
           const subRoundsSnap = await getDocs(collection(db, 'moduleRuns', runDoc.id, 'rounds'));
           rounds = subRoundsSnap.docs.map(rDoc => ({
@@ -487,15 +487,29 @@ export async function getCohortAggregateReport(
         }
       }
 
-      const existing = learnerRunsMap.get(code) || [];
-      existing.push({
+      return {
+        code,
         id: runDoc.id,
         moduleId: runData.moduleId || 'money_rules',
         attemptType: runData.attemptType || 'baseline',
         score: runData.score,
         rounds
+      };
+    });
+
+    const parsedRuns = await Promise.all(runPromises);
+
+    for (const runItem of parsedRuns) {
+      if (!runItem) continue;
+      const existing = learnerRunsMap.get(runItem.code) || [];
+      existing.push({
+        id: runItem.id,
+        moduleId: runItem.moduleId,
+        attemptType: runItem.attemptType,
+        score: runItem.score,
+        rounds: runItem.rounds
       });
-      learnerRunsMap.set(code, existing);
+      learnerRunsMap.set(runItem.code, existing);
     }
 
     // 1. Tag aggregation across all real learners and runs
