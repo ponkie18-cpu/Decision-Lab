@@ -4,7 +4,7 @@
  * behavioral identity tags, and raw LLM forensic feedback panel for worst round.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   UserAdminProfile, 
   UserBehavioralProfileData 
@@ -71,14 +71,22 @@ export const BehavioralRadarView: React.FC<BehavioralRadarViewProps> = ({
     loadData();
   }, [selectedUserId, liveSimulationRun]);
 
-  const filteredUsers = MOCK_ADMIN_USERS.filter(u => 
-    !u.isAdmin && (
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (u.email ? u.email.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
-      u.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.cohortName.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  // Bolt Optimization: Memoize filtered user list and compute lowercased search term once outside loop
+  // to prevent unnecessary array iterations and redundant string transformations on unrelated renders.
+  const filteredUsers = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      return MOCK_ADMIN_USERS.filter(u => !u.isAdmin);
+    }
+    return MOCK_ADMIN_USERS.filter(u =>
+      !u.isAdmin && (
+        u.name.toLowerCase().includes(term) ||
+        (u.email ? u.email.toLowerCase().includes(term) : false) ||
+        u.id.toLowerCase().includes(term) ||
+        u.cohortName.toLowerCase().includes(term)
+      )
+    );
+  }, [searchTerm]);
 
   return (
     <div className="space-y-8 font-sans text-slate-100">
