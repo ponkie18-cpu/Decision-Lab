@@ -1,0 +1,3 @@
+## 2026-10-23 - Consolidating Decision Score and Behavioral Tag Iterations
+**Learning:** In Module 3 (Event Planner simulation), calculation routines (`calculateModule3Score` and `detectModule3BehavioralTags`) were separately iterating over round records and performing repeated string lowercasing and regex evaluations on every render/state update. Pre-converting keys and simplifying string parsing into single-pass loops removed overhead during round simulations.
+**Action:** Pre-process string keys for lookups outside loops and avoid re-instantiating regular expressions within simulation loops.

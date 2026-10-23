@@ -177,7 +177,7 @@ export async function loginUser(payload: LoginPayload): Promise<UserAdminProfile
     ...userRecord.profile,
     isAdmin,
     role: isAdmin ? 'admin' : userRecord.profile.role,
-  };
+  } as UserAdminProfile;
 
   localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedProfile));
   return updatedProfile;

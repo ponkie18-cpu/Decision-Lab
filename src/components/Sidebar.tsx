@@ -88,14 +88,23 @@ const CURRICULUM: CurriculumModule[] = [
   }
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ currentState, onSelectModule, onViewReports, onOpenAdminPortal }) => {
   const learningState = currentState.learningState;
   const completedCount = currentState.completedModules.length;
   const totalCount = CURRICULUM.length;
-  const globalProgress = (completedCount / totalCount) * 100;
+  const globalProgress = React.useMemo(() => (completedCount / totalCount) * 100, [completedCount, totalCount]);
 
-  const currentModuleData = CURRICULUM.find(m => m.id === currentState.module);
+  const currentModuleData = React.useMemo(() => CURRICULUM.find(m => m.id === currentState.module), [currentState.module]);
   const currentSignal = learningState?.moduleSignals[currentState.module];
+
+  const verifiedAssets = React.useMemo(
+    () => learningState?.assets.filter(a => a.status === 'Verified') || [],
+    [learningState?.assets]
+  );
+  const nonVerifiedAssets = React.useMemo(
+    () => learningState?.assets.filter(a => a.status !== 'Verified') || [],
+    [learningState?.assets]
+  );
 
   const getTrendIcon = (trajectory?: string) => {
     if (!trajectory) return null;
@@ -350,12 +359,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             {/* Verified Assets */}
             <div className="space-y-1.5">
               <span className="text-[7px] text-emerald-500 uppercase font-black tracking-widest ml-1">Verified Assets</span>
-              {learningState?.assets.filter(a => a.status === 'Verified').length === 0 ? (
+              {verifiedAssets.length === 0 ? (
                  <div className="p-2 border border-dashed border-slate-800 rounded-sm text-center">
                    <p className="text-[7px] text-slate-700 uppercase font-bold italic">No verified records</p>
                  </div>
               ) : (
-                learningState?.assets.filter(a => a.status === 'Verified').map(asset => (
+                verifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800 rounded-sm hover:bg-slate-900 transition-colors group">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-300">{asset.name}</span>
@@ -368,10 +377,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
             </div>
 
             {/* Needs Improvement */}
-            {learningState?.assets.some(a => a.status !== 'Verified') && (
+            {nonVerifiedAssets.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[7px] text-amber-500 uppercase font-black tracking-widest ml-1">Needs Improvement</span>
-                {learningState?.assets.filter(a => a.status !== 'Verified').map(asset => (
+                {nonVerifiedAssets.map(asset => (
                   <button key={asset.id} className="w-full flex items-center justify-between p-2 bg-[#06080A] border border-slate-800/50 rounded-sm hover:bg-slate-900 transition-colors group opacity-70 hover:opacity-100">
                     <div className="flex flex-col items-start">
                       <span className="text-[9px] font-bold uppercase text-slate-400 italic line-through decoration-slate-700">{asset.name}</span>
@@ -437,4 +446,4 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentState, onSelectModule, 
       </div>
     </div>
   );
-};
+});

@@ -184,30 +184,40 @@ export const calculateModule3Score = (rounds: RoundRecord[]): ModuleScore => {
   let hasFood = true;
   let hasDJ = true;
 
-  rounds.forEach((r) => {
+  const repRegex = /Reputation at (\d+)\/100/;
+
+  for (let i = 0; i < rounds.length; i++) {
+    const r = rounds[i];
     const d = r.decisions || {};
     const res = r.results || ({} as any);
 
-    const venueCost = EVENT_PLANNER_COSTS[d.venue] || 0;
-    const djCost = EVENT_PLANNER_COSTS[d.entertainment] || 0;
-    const foodCost = EVENT_PLANNER_COSTS[d.food] || 0;
-    const safetyCost = EVENT_PLANNER_COSTS[d.safety] || 0;
-    const backupCost = EVENT_PLANNER_COSTS[d.backup] || 0;
+    if (res.totalCost !== undefined) {
+      totalSpend += res.totalCost;
+    } else {
+      const venueCost = EVENT_PLANNER_COSTS[d.venue] || 0;
+      const djCost = EVENT_PLANNER_COSTS[d.entertainment] || 0;
+      const foodCost = EVENT_PLANNER_COSTS[d.food] || 0;
+      const safetyCost = EVENT_PLANNER_COSTS[d.safety] || 0;
+      const backupCost = EVENT_PLANNER_COSTS[d.backup] || 0;
+      totalSpend += (venueCost + djCost + foodCost + safetyCost + backupCost);
+    }
 
-    const roundCost = venueCost + djCost + foodCost + safetyCost + backupCost;
-    totalSpend += (res.totalCost !== undefined ? res.totalCost : roundCost);
-
-    // Robust extraction of reputation from multiple possible locations
+    // Fast extraction of reputation
     let roundRep = res.reputation;
     if (roundRep === undefined && Array.isArray(res.secondaryInsights)) {
-      const repInsight = res.secondaryInsights.find((s: string) => typeof s === 'string' && s.startsWith('Reputation:'));
-      if (repInsight) {
-        const val = parseInt(repInsight.replace('Reputation:', '').trim(), 10);
-        if (!isNaN(val)) roundRep = val;
+      for (let j = 0; j < res.secondaryInsights.length; j++) {
+        const s = res.secondaryInsights[j];
+        if (typeof s === 'string' && s.startsWith('Reputation:')) {
+          const val = parseInt(s.slice(11).trim(), 10);
+          if (!isNaN(val)) {
+            roundRep = val;
+            break;
+          }
+        }
       }
     }
     if (roundRep === undefined && typeof res.tutorFeedback === 'string') {
-      const match = res.tutorFeedback.match(/Reputation at (\d+)\/100/);
+      const match = res.tutorFeedback.match(repRegex);
       if (match) roundRep = parseInt(match[1], 10);
     }
     if (roundRep === undefined && typeof res.stabilityScore === 'number') {
@@ -220,10 +230,11 @@ export const calculateModule3Score = (rounds: RoundRecord[]): ModuleScore => {
     if (res.revenue !== undefined) finalRevenue = Math.max(finalRevenue, res.revenue);
 
     // Evaluate safety
-    const safety = (d.safety || '').toLowerCase();
-    if (safety.includes('proper') || safety.includes('security')) {
+    const safety = d.safety || '';
+    const lowerSafety = safety.toLowerCase();
+    if (lowerSafety.includes('proper') || lowerSafety.includes('security')) {
       safetyAdequacy = Math.max(safetyAdequacy, 90);
-    } else if (safety.includes('basic') || safety.includes('first-aid')) {
+    } else if (lowerSafety.includes('basic') || lowerSafety.includes('first-aid')) {
       safetyAdequacy = Math.max(safetyAdequacy, 65);
     }
 
@@ -233,7 +244,7 @@ export const calculateModule3Score = (rounds: RoundRecord[]): ModuleScore => {
 
     if (!d.food || d.food === 'None' || d.food.toLowerCase().includes('none')) hasFood = false;
     if (!d.entertainment || d.entertainment === 'None' || d.entertainment.toLowerCase().includes('none')) hasDJ = false;
-  });
+  }
 
   // Backup bonus
   if (hasBackup) {
