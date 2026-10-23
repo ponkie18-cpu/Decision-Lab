@@ -1741,7 +1741,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {lastRound.results.secondaryInsights.length > 0 && (
+                        {Array.isArray(lastRound.results.secondaryInsights) && lastRound.results.secondaryInsights.length > 0 && (
                           <div className="mt-6 pt-4 border-t border-slate-800 space-y-2">
                              <p className="text-[8px] uppercase font-bold text-[#64748B] tracking-widest">System Observations:</p>
                              {lastRound.results.secondaryInsights.map((insight, i) => (
