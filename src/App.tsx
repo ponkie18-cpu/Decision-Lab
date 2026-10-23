@@ -60,6 +60,7 @@ export default function App() {
       isAdmin: true,
       createdAt: new Date().toISOString(),
       attemptsCount: 0,
+      isMinorCohort: false,
     };
   });
   const [authRoute, setAuthRoute] = useState<'dashboard' | 'admin' | 'login' | 'register' | 'learner_login'>(() => {
@@ -464,7 +465,7 @@ export default function App() {
     "Rain backup": 700, "Supplier backup": 700, "Full backup plan": 1200,
   };
 
-  const calculateRoundCost = () => {
+  const calculateRoundCost = React.useCallback(() => {
     let total = 0;
     if (isModule1) {
       const cR = parseInt(m1Decisions.chipsRestock) || 0;
@@ -485,9 +486,9 @@ export default function App() {
       if (decisions.backup !== state.eventReadiness?.backup.level) total += costs[decisions.backup] || 0;
     }
     return total;
-  };
+  }, [isModule1, isModule3, m1Decisions, m3Decisions, decisions, state.complianceState, state.eventReadiness]);
 
-  const totalSpend = calculateRoundCost();
+  const totalSpend = React.useMemo(() => calculateRoundCost(), [calculateRoundCost]);
   
   const handleExecuteRound = async () => {
     setLoading(true);
@@ -811,7 +812,7 @@ export default function App() {
           timestamp: new Date().toISOString()
         }}
         onExitAdmin={() => setAuthRoute('dashboard')}
-        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin }))}
+        onToggleAdminRole={() => setCurrentUser(prev => ({ ...prev, isAdmin: !prev.isAdmin } as UserAdminProfile))}
       />
     );
   }

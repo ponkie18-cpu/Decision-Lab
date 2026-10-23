@@ -179,15 +179,24 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
   return Array.from(tags);
 }
 
+const EVENT_PLANNER_COSTS_LOWER: Array<[string, number]> = Object.entries(EVENT_PLANNER_COSTS).map(
+  ([key, cost]) => [key.toLowerCase(), cost]
+);
+
 function getEventPlannerCost(item: string): number {
-  if (!item || item === 'None' || item.toLowerCase().includes('none') || item.toLowerCase().includes('no safety')) return 0;
+  if (!item || item === 'None') return 0;
   if (EVENT_PLANNER_COSTS[item] !== undefined) return EVENT_PLANNER_COSTS[item];
+
+  const lowerItem = item.toLowerCase();
+  if (lowerItem.includes('none') || lowerItem.includes('no safety')) return 0;
+
   const match = item.match(/R([\d,]+)/i);
   if (match) {
     return parseInt(match[1].replace(/,/g, ''), 10) || 0;
   }
-  for (const [key, cost] of Object.entries(EVENT_PLANNER_COSTS)) {
-    if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
+  for (let i = 0; i < EVENT_PLANNER_COSTS_LOWER.length; i++) {
+    const [lowerKey, cost] = EVENT_PLANNER_COSTS_LOWER[i];
+    if (lowerItem.includes(lowerKey) || lowerKey.includes(lowerItem)) {
       return cost;
     }
   }
@@ -213,27 +222,34 @@ export function detectModule3BehavioralTags(rounds: RoundRecord[]): string[] {
   let finalReputation = 50;
   let safetyEverProper = false;
   let safetyNoneInLateRound = false;
-  let backupEverActivated = false;
   let backupActivatedEarly = false; // By Day 2 or 3
   let foodEverNone = false;
   let entertainmentEverNone = false;
   let overconfiguredFound = false;
 
-  rounds.forEach((r) => {
+  const repRegex = /Reputation at (\d+)\/100/;
+
+  for (let i = 0; i < rounds.length; i++) {
+    const r = rounds[i];
     const d = r.decisions || {};
     const res = r.results || ({} as any);
 
-    // Robust extraction of reputation from multiple possible locations
+    // Fast extraction of reputation
     let roundRep = res.reputation;
     if (roundRep === undefined && Array.isArray(res.secondaryInsights)) {
-      const repInsight = res.secondaryInsights.find((s: string) => typeof s === 'string' && s.startsWith('Reputation:'));
-      if (repInsight) {
-        const val = parseInt(repInsight.replace('Reputation:', '').trim(), 10);
-        if (!isNaN(val)) roundRep = val;
+      for (let j = 0; j < res.secondaryInsights.length; j++) {
+        const s = res.secondaryInsights[j];
+        if (typeof s === 'string' && s.startsWith('Reputation:')) {
+          const val = parseInt(s.slice(11).trim(), 10);
+          if (!isNaN(val)) {
+            roundRep = val;
+            break;
+          }
+        }
       }
     }
     if (roundRep === undefined && typeof res.tutorFeedback === 'string') {
-      const match = res.tutorFeedback.match(/Reputation at (\d+)\/100/);
+      const match = res.tutorFeedback.match(repRegex);
       if (match) roundRep = parseInt(match[1], 10);
     }
     if (roundRep === undefined && typeof res.stabilityScore === 'number') {
@@ -250,42 +266,49 @@ export function detectModule3BehavioralTags(rounds: RoundRecord[]): string[] {
     const backup = d.backup || 'None';
 
     // Calculate spend using real cost schedule
-    const roundSpend =
-      getEventPlannerCost(venue) +
-      getEventPlannerCost(entertainment) +
-      getEventPlannerCost(food) +
-      getEventPlannerCost(safety) +
-      getEventPlannerCost(backup);
+    if (res.totalCost !== undefined) {
+      totalCumulativeSpend += res.totalCost;
+    } else {
+      totalCumulativeSpend +=
+        getEventPlannerCost(venue) +
+        getEventPlannerCost(entertainment) +
+        getEventPlannerCost(food) +
+        getEventPlannerCost(safety) +
+        getEventPlannerCost(backup);
+    }
 
-    totalCumulativeSpend += (res.totalCost !== undefined ? res.totalCost : roundSpend);
+    const lowerSafety = safety.toLowerCase();
+    const lowerVenue = venue.toLowerCase();
+    const lowerFood = food.toLowerCase();
+    const lowerBackup = backup.toLowerCase();
+    const lowerEnt = entertainment.toLowerCase();
 
     // Check safety levels
-    if (safety.toLowerCase().includes('proper') || safety.toLowerCase().includes('security')) {
+    if (lowerSafety.includes('proper') || lowerSafety.includes('security')) {
       safetyEverProper = true;
     }
-    if ((safety === 'None' || safety.toLowerCase().includes('no safety')) && r.round >= 2) {
+    if ((safety === 'None' || lowerSafety.includes('no safety')) && r.round >= 2) {
       safetyNoneInLateRound = true;
     }
 
     // Check backup plan
-    if (backup && backup !== 'None' && !backup.toLowerCase().includes('none')) {
-      backupEverActivated = true;
+    if (backup && backup !== 'None' && !lowerBackup.includes('none')) {
       if (r.round <= 3) backupActivatedEarly = true;
     }
 
     // Check stakeholder neglect
-    if (food === 'None' || food.toLowerCase().includes('none')) foodEverNone = true;
-    if (entertainment === 'None' || entertainment.toLowerCase().includes('none')) entertainmentEverNone = true;
+    if (food === 'None' || lowerFood.includes('none')) foodEverNone = true;
+    if (entertainment === 'None' || lowerEnt.includes('none')) entertainmentEverNone = true;
 
     // Check overconfigured
     if (
-      (venue.toLowerCase().includes('premium') || venue.toLowerCase().includes('community')) &&
-      (food.toLowerCase().includes('large') || food.toLowerCase().includes('buffet')) &&
-      (backup.toLowerCase().includes('full') || backup.toLowerCase().includes('indoor'))
+      (lowerVenue.includes('premium') || lowerVenue.includes('community')) &&
+      (lowerFood.includes('large') || lowerFood.includes('buffet')) &&
+      (lowerBackup.includes('full') || lowerBackup.includes('indoor'))
     ) {
       overconfiguredFound = true;
     }
-  });
+  }
 
   // 1. Risk Ignorer
   if (safetyNoneInLateRound || (!safetyEverProper && rounds.length >= 2)) {
