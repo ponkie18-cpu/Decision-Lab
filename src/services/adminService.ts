@@ -464,8 +464,8 @@ export async function getCohortAggregateReport(
     const runsRef = collection(db, 'moduleRuns');
     const runsSnap = await getDocs(runsRef);
 
-    // Group runs by learnerCode
-    const learnerRunsMap = new Map<string, Array<{ id: string; moduleId: any; attemptType: string; score: any; rounds: RoundRecord[] }>>();
+    // Group runs by learnerCode, pre-computing detected tags once per run (Bolt Optimization)
+    const learnerRunsMap = new Map<string, Array<{ id: string; moduleId: any; attemptType: string; score: any; rounds: RoundRecord[]; detectedTags: string[] }>>();
 
     for (const runDoc of runsSnap.docs) {
       const runData = runDoc.data();
@@ -487,13 +487,18 @@ export async function getCohortAggregateReport(
         }
       }
 
+      const moduleId = runData.moduleId || 'money_rules';
+      // Pre-compute behavioral tags once per run to avoid redundant calls in aggregation loop
+      const detectedTags = detectBehavioralTags(moduleId, rounds);
+
       const existing = learnerRunsMap.get(code) || [];
       existing.push({
         id: runDoc.id,
-        moduleId: runData.moduleId || 'money_rules',
+        moduleId,
         attemptType: runData.attemptType || 'baseline',
         score: runData.score,
-        rounds
+        rounds,
+        detectedTags
       });
       learnerRunsMap.set(code, existing);
     }
@@ -551,11 +556,10 @@ export async function getCohortAggregateReport(
     for (const [learnerCode, runs] of learnerRunsMap.entries()) {
       totalEvaluatedParticipants++;
 
-      // Collect tags from all runs of this learner
+      // Collect tags from all runs of this learner using pre-computed detectedTags
       const learnerTags = new Set<string>();
       runs.forEach(r => {
-        const detected = detectBehavioralTags(r.moduleId, r.rounds);
-        detected.forEach(t => learnerTags.add(t));
+        r.detectedTags.forEach(t => learnerTags.add(t));
       });
 
       learnerTags.forEach(t => {
@@ -578,7 +582,7 @@ export async function getCohortAggregateReport(
 
       // Dimension breakdown using real evaluated performance
       if (baselineRun && baselineScoreObj) {
-        const tags = detectBehavioralTags(baselineRun.moduleId, baselineRun.rounds);
+        const tags = baselineRun.detectedTags;
         const hasNegMargin = tags.some(t => t.toLowerCase().includes('negative margin'));
         const hasCashLock = tags.some(t => t.toLowerCase().includes('cash lock'));
         const hasRiskIgnorer = tags.some(t => t.toLowerCase().includes('risk ignorer'));
@@ -602,7 +606,7 @@ export async function getCohortAggregateReport(
         baselineDimensionSums.count++;
       }
       if (replayRun && replayScoreObj) {
-        const tags = detectBehavioralTags(replayRun.moduleId, replayRun.rounds);
+        const tags = replayRun.detectedTags;
         const hasNegMargin = tags.some(t => t.toLowerCase().includes('negative margin'));
         const hasCashLock = tags.some(t => t.toLowerCase().includes('cash lock'));
         const hasRiskIgnorer = tags.some(t => t.toLowerCase().includes('risk ignorer'));
