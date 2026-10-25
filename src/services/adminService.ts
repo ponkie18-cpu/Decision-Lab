@@ -180,7 +180,24 @@ export async function isAffirmativeMinorLearner(
 export async function isAffirmativeMinorCohort(cohortId: string): Promise<boolean> {
   const cleanCohortId = cohortId.trim();
 
-  // 1. Authoritative Firestore check: does this cohort have registered learners in the zero-PII collection?
+  // 1. Performance Optimization: Short-circuit known registered minor pilot cohorts & namespace patterns first
+  // to avoid redundant async Firestore network roundtrips.
+  const KNOWN_MINOR_COHORTS = new Set([
+    'school-pilot-2026',
+    'school-pilot-2026-tuckshop',
+    'school-pilot-2026-event',
+    'school-pilot-2026-nomsa'
+  ]);
+  if (
+    KNOWN_MINOR_COHORTS.has(cleanCohortId) ||
+    cleanCohortId.startsWith('school-pilot') ||
+    cleanCohortId.includes('school') ||
+    cleanCohortId.includes('minor')
+  ) {
+    return true;
+  }
+
+  // 2. Authoritative Firestore check fallback: does this cohort have registered learners in the zero-PII collection?
   try {
     if (auth && (auth as any).authStateReady) {
       await (auth as any).authStateReady();
@@ -192,22 +209,6 @@ export async function isAffirmativeMinorCohort(cohortId: string): Promise<boolea
     }
   } catch (err) {
     console.warn("Firestore minor cohort query check fallback:", err);
-  }
-
-  // 2. Known registered minor pilot cohorts registry
-  const KNOWN_MINOR_COHORTS = new Set([
-    'school-pilot-2026',
-    'school-pilot-2026-tuckshop',
-    'school-pilot-2026-event',
-    'school-pilot-2026-nomsa'
-  ]);
-  if (KNOWN_MINOR_COHORTS.has(cleanCohortId)) {
-    return true;
-  }
-
-  // 3. Fallback namespace convention check
-  if (cleanCohortId.startsWith('school-pilot') || cleanCohortId.includes('school') || cleanCohortId.includes('minor')) {
-    return true;
   }
 
   return false;
@@ -467,36 +468,40 @@ export async function getCohortAggregateReport(
     // Group runs by learnerCode
     const learnerRunsMap = new Map<string, Array<{ id: string; moduleId: any; attemptType: string; score: any; rounds: RoundRecord[] }>>();
 
-    for (const runDoc of runsSnap.docs) {
-      const runData = runDoc.data();
-      const code = runData.learnerCode || runData.userId;
-      if (!code) continue;
+    // Performance Optimization: Parallelize fetching of subcollection rounds across all run documents
+    // to eliminate sequential O(N) async waterfall network latency.
+    await Promise.all(
+      runsSnap.docs.map(async (runDoc) => {
+        const runData = runDoc.data();
+        const code = runData.learnerCode || runData.userId;
+        if (!code) return;
 
-      let rounds: RoundRecord[] = runData.rounds || [];
-      if (!rounds || rounds.length === 0) {
-        // Fetch subcollection rounds
-        try {
-          const subRoundsSnap = await getDocs(collection(db, 'moduleRuns', runDoc.id, 'rounds'));
-          rounds = subRoundsSnap.docs.map(rDoc => ({
-            round: parseInt(rDoc.id, 10) || 1,
-            decisions: rDoc.data().decisions || {},
-            results: rDoc.data().results || {}
-          })).sort((a, b) => a.round - b.round);
-        } catch {
-          rounds = [];
+        let rounds: RoundRecord[] = runData.rounds || [];
+        if (!rounds || rounds.length === 0) {
+          // Fetch subcollection rounds concurrently
+          try {
+            const subRoundsSnap = await getDocs(collection(db, 'moduleRuns', runDoc.id, 'rounds'));
+            rounds = subRoundsSnap.docs.map(rDoc => ({
+              round: parseInt(rDoc.id, 10) || 1,
+              decisions: rDoc.data().decisions || {},
+              results: rDoc.data().results || {}
+            })).sort((a, b) => a.round - b.round);
+          } catch {
+            rounds = [];
+          }
         }
-      }
 
-      const existing = learnerRunsMap.get(code) || [];
-      existing.push({
-        id: runDoc.id,
-        moduleId: runData.moduleId || 'money_rules',
-        attemptType: runData.attemptType || 'baseline',
-        score: runData.score,
-        rounds
-      });
-      learnerRunsMap.set(code, existing);
-    }
+        const existing = learnerRunsMap.get(code) || [];
+        existing.push({
+          id: runDoc.id,
+          moduleId: runData.moduleId || 'money_rules',
+          attemptType: runData.attemptType || 'baseline',
+          score: runData.score,
+          rounds
+        });
+        learnerRunsMap.set(code, existing);
+      })
+    );
 
     // 1. Tag aggregation across all real learners and runs
     const tagCountMap = new Map<string, number>();

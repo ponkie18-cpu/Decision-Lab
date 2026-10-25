@@ -1,0 +1,3 @@
+## 2026-03-31 - Firestore Subcollection Query Parallelization & Short-Circuiting
+**Learning:** Sequential `for...of` loops over Firestore query snapshots that execute `await getDocs()` for subcollections create an $O(N)$ async network waterfall. Furthermore, performing unneeded remote Firestore queries before checking static known identifier sets causes unnecessary network latency.
+**Action:** Always wrap subcollection queries across document lists in `Promise.all(snapshot.docs.map(async doc => ...))` to issue requests in parallel. Additionally, evaluate local static registries and regex namespace rules before issuing remote Firestore queries.
