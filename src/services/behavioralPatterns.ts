@@ -341,7 +341,7 @@ export function detectBehavioralTags(module: ModuleType, rounds: RoundRecord[]):
   if (rounds && rounds.length > 0) {
     const tags: string[] = [];
     rounds.forEach(r => {
-      if (r.results?.secondaryInsights) {
+      if (Array.isArray(r.results?.secondaryInsights)) {
         tags.push(...r.results.secondaryInsights);
       }
     });
