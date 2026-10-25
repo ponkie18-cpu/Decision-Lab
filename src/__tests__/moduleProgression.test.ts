@@ -1,6 +1,6 @@
 // @ts-ignore
 import { describe, it, expect, beforeEach } from 'vitest';
-import { simulateRound } from '../services/simulationService';
+import { runDeterministicSimulation } from '../services/simulationService';
 import {
   INITIAL_STATE_MODULE_1,
   INITIAL_STATE_MODULE_2,
@@ -16,7 +16,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     delete process.env.GEMINI_API_KEY;
   });
 
-  it('Module 1: Money Has Rules (12 Rounds)', async () => {
+  it('Module 1: Money Has Rules (12 Rounds)', () => {
     let state: GameState = { ...INITIAL_STATE_MODULE_1 };
 
     const m1Decisions: Decisions[] = [
@@ -39,7 +39,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     for (let r = 1; r <= 12; r++) {
       const startRound = state.round;
       const dec = m1Decisions[r - 1];
-      const res = await simulateRound(state, dec);
+      const res = runDeterministicSimulation(state, dec);
 
       // Invariants
       expect(res.newState.round).toBe(startRound + 1);
@@ -71,7 +71,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     expect(roundSnapshots).toMatchSnapshot();
   });
 
-  it('Module 2: School Event Disaster (5 Days)', async () => {
+  it('Module 2: School Event Disaster (5 Days)', () => {
     let state: GameState = { ...INITIAL_STATE_MODULE_2 };
 
     const m2Decisions: Decisions[] = [
@@ -87,7 +87,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     for (let d = 1; d <= 5; d++) {
       const startRound = state.round;
       const dec = m2Decisions[d - 1];
-      const res = await simulateRound(state, dec);
+      const res = runDeterministicSimulation(state, dec);
 
       // Invariants
       expect(res.newState.round).toBe(startRound + 1);
@@ -117,7 +117,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     expect(roundSnapshots).toMatchSnapshot();
   });
 
-  it('Module 3: Nomsa Gets a Fine (6 Months)', async () => {
+  it('Module 3: Nomsa Gets a Fine (6 Months)', () => {
     let state: GameState = { ...INITIAL_STATE_MODULE_3 };
 
     const m3Decisions: Decisions[] = [
@@ -135,7 +135,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     for (let m = 1; m <= 6; m++) {
       const startRound = state.round;
       const dec = m3Decisions[m - 1];
-      const res = await simulateRound(state, dec);
+      const res = runDeterministicSimulation(state, dec);
 
       // Invariants
       expect(res.newState.round).toBe(startRound + 1);
@@ -181,7 +181,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
     console.table(empiricalSalesCashTable);
   });
 
-  it('Module 4: The Decision Game (15 Rounds)', async () => {
+  it('Module 4: The Decision Game (15 Rounds)', () => {
     let state: GameState = { ...INITIAL_STATE_MODULE_4 };
 
     const roundSnapshots: any[] = [];
@@ -192,7 +192,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
         ? { price: "Medium Price", action: "Cooperate" }
         : (r <= 10 ? { action: "Cooperate" } : { offer: "Counter Fair" });
 
-      const res = await simulateRound(state, dec);
+      const res = runDeterministicSimulation(state, dec);
 
       // Invariants
       expect(res.newState.round).toBe(startRound + 1);

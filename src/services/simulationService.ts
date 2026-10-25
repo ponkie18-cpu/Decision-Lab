@@ -15,7 +15,7 @@ function getAIClient() {
   }
 }
 
-function runDeterministicSimulation(
+export function runDeterministicSimulation(
   currentState: GameState,
   decisions: Decisions
 ): RoundResults & { newState: Partial<GameState> } {
