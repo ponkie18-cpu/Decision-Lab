@@ -263,62 +263,66 @@ export async function backfillAuditLogsFromRuns(maxNeeded: number = 20): Promise
 
   const entries: AuditLogEntry[] = [];
 
-  for (const runDoc of runsSnap.docs) {
-    const runData = runDoc.data();
-    const learnerCode = runData.learnerCode || runData.userId || 'ANON';
-    const cohortId = runData.cohortId || 'school-pilot-2026-tuckshop';
-    const moduleId = runData.moduleId || 'money_rules';
-    const runTimestamp = runData.startedAt?.seconds
-      ? runData.startedAt.seconds * 1000
-      : (runData.startedAt ? new Date(runData.startedAt).getTime() : Date.now() - 3600000);
+  // Performance Optimization: Parallelize fetching of subcollection rounds across all run documents
+  // to avoid O(N) sequential async waterfall network delays when backfilling audit logs.
+  await Promise.all(
+    runsSnap.docs.map(async (runDoc) => {
+      const runData = runDoc.data();
+      const learnerCode = runData.learnerCode || runData.userId || 'ANON';
+      const cohortId = runData.cohortId || 'school-pilot-2026-tuckshop';
+      const moduleId = runData.moduleId || 'money_rules';
+      const runTimestamp = runData.startedAt?.seconds
+        ? runData.startedAt.seconds * 1000
+        : (runData.startedAt ? new Date(runData.startedAt).getTime() : Date.now() - 3600000);
 
-    // Fetch rounds
-    const roundsRef = collection(db, 'moduleRuns', runDoc.id, 'rounds');
-    const roundsSnap = await getDocs(roundsRef);
+      // Fetch rounds concurrently
+      const roundsRef = collection(db, 'moduleRuns', runDoc.id, 'rounds');
+      const roundsSnap = await getDocs(roundsRef);
 
-    roundsSnap.forEach((roundDoc) => {
-      const rData = roundDoc.data();
-      const roundNumber = rData.round || parseInt(roundDoc.id, 10) || 1;
-      const roundTimestamp = rData.writtenAt?.seconds
-        ? rData.writtenAt.seconds * 1000
-        : runTimestamp + (roundNumber * 60000);
+      roundsSnap.forEach((roundDoc) => {
+        const rData = roundDoc.data();
+        const roundNumber = rData.round || parseInt(roundDoc.id, 10) || 1;
+        const roundTimestamp = rData.writtenAt?.seconds
+          ? rData.writtenAt.seconds * 1000
+          : runTimestamp + (roundNumber * 60000);
 
-      const decisions = rData.decisions || {};
-      const results = rData.results || {};
+        const decisions = rData.decisions || {};
+        const results = rData.results || {};
 
-      const behavioralTags = detectBehavioralTags(moduleId as ModuleType, [{
-        round: roundNumber,
-        decisions: decisions as any,
-        results: results as any
-      }]);
+        const behavioralTags = detectBehavioralTags(moduleId as ModuleType, [{
+          round: roundNumber,
+          decisions: decisions as any,
+          results: results as any
+        }]);
 
-      const entry: AuditLogEntry = {
-        id: `audit_${runDoc.id}_r${roundNumber}`,
-        timestamp: new Date(roundTimestamp).toISOString(),
-        createdAtMs: roundTimestamp,
-        learnerCode: learnerCode.toUpperCase(),
-        cohortId,
-        moduleId,
-        moduleName: MODULE_NAMES[moduleId] || moduleId,
-        roundNumber,
-        actionType: 'decision_submitted',
-        decisionSummary: formatDecisionSummary(moduleId, decisions),
-        resultSummary: formatResultSummary(moduleId, results),
-        decisions,
-        results,
-        behavioralTags,
-        severity: determineSeverity(results)
-      };
+        const entry: AuditLogEntry = {
+          id: `audit_${runDoc.id}_r${roundNumber}`,
+          timestamp: new Date(roundTimestamp).toISOString(),
+          createdAtMs: roundTimestamp,
+          learnerCode: learnerCode.toUpperCase(),
+          cohortId,
+          moduleId,
+          moduleName: MODULE_NAMES[moduleId] || moduleId,
+          roundNumber,
+          actionType: 'decision_submitted',
+          decisionSummary: formatDecisionSummary(moduleId, decisions),
+          resultSummary: formatResultSummary(moduleId, results),
+          decisions,
+          results,
+          behavioralTags,
+          severity: determineSeverity(results)
+        };
 
-      entries.push(entry);
+        entries.push(entry);
 
-      // Opportunistically persist to auditLogs collection for future real-time indexing
-      setDoc(doc(db, 'auditLogs', entry.id), {
-        ...entry,
-        writtenAt: serverTimestamp()
-      }).catch(() => {});
-    });
-  }
+        // Opportunistically persist to auditLogs collection for future real-time indexing
+        setDoc(doc(db, 'auditLogs', entry.id), {
+          ...entry,
+          writtenAt: serverTimestamp()
+        }).catch(() => {});
+      });
+    })
+  );
 
   entries.sort((a, b) => b.createdAtMs - a.createdAtMs);
   return entries.slice(0, maxNeeded);

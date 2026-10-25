@@ -3,7 +3,7 @@
  * Manages registration, login, session persistence, and RBAC admin role assignment.
  */
 
-import { UserAdminProfile } from '../types/admin';
+import { UserAdminProfile, AdultParticipantProfile } from '../types/admin';
 
 // Admin Seeding Array: Any email matching this list will be granted isAdmin: true and role: 'admin'
 export const ADMIN_EMAILS: string[] = [
@@ -173,11 +173,17 @@ export async function loginUser(payload: LoginPayload): Promise<UserAdminProfile
 
   // Re-verify if email is in ADMIN_EMAILS in case seeding list updated
   const isAdmin = isSeededAdminEmail(emailNorm) || userRecord.profile.isAdmin;
-  const updatedProfile: UserAdminProfile = {
-    ...userRecord.profile,
-    isAdmin,
-    role: isAdmin ? 'admin' : userRecord.profile.role,
-  };
+  let updatedProfile: UserAdminProfile;
+  if (!userRecord.profile.isMinorCohort) {
+    const adult = userRecord.profile as AdultParticipantProfile;
+    updatedProfile = {
+      ...adult,
+      isAdmin,
+      role: isAdmin ? 'admin' : adult.role,
+    };
+  } else {
+    updatedProfile = userRecord.profile;
+  }
 
   localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedProfile));
   return updatedProfile;
