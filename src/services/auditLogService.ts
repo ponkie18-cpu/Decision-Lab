@@ -23,8 +23,11 @@ import { ModuleType, RoundRecord } from '../types';
 
 export const MODULE_NAMES: Record<string, string> = {
   money_rules: 'Tuckshop Math (Module 1)',
-  nomsa_spaza: 'Spaza Compliance (Module 2)',
-  event_disaster: 'School Event Planner (Module 3)',
+  event_disaster: 'School Event Disaster (Module 2)',
+  nomsa_fine: 'Spaza Compliance (Module 3)',
+  nomsa_spaza: 'Spaza Compliance (Module 3)',
+  decision_game: 'The Decision Game (Module 4)',
+  strategy: 'What is Strategy? (Module 5)',
   game_rounds: 'Strategy Arena (Module 4)'
 };
 
@@ -58,11 +61,22 @@ export function formatDecisionSummary(moduleId: string, decisions: Record<string
     return parts.join(' | ') || 'Event operational setup submitted';
   }
 
-  if (moduleId === 'nomsa_spaza') {
+  if (moduleId === 'nomsa_spaza' || moduleId === 'nomsa_fine') {
     const parts: string[] = [];
     if (decisions.supplier) parts.push(`Supplier: ${decisions.supplier}`);
     if (decisions.complianceAction) parts.push(`Action: ${decisions.complianceAction}`);
+    if (decisions.registration) parts.push(`Reg: ${decisions.registration}`);
+    if (decisions.tax) parts.push(`Tax: ${decisions.tax}`);
+    if (decisions.permit) parts.push(`Permit: ${decisions.permit}`);
     return parts.join(' | ') || 'Compliance decisions submitted';
+  }
+
+  if (moduleId === 'decision_game' || moduleId === 'strategy' || moduleId === 'game_rounds') {
+    const parts: string[] = [];
+    if (decisions.price) parts.push(`Price: ${decisions.price}`);
+    if (decisions.action) parts.push(`Action: ${decisions.action}`);
+    if (decisions.offer) parts.push(`Offer: ${decisions.offer}`);
+    return parts.join(' | ') || 'Strategy decision submitted';
   }
 
   return Object.entries(decisions)

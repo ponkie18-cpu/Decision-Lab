@@ -240,7 +240,10 @@ export async function saveRoundRecord(
   let learnerCode = 'ANON';
   let moduleId = 'money_rules';
   const parts = runId.split('_');
-  if (parts.length >= 3) {
+  if (parts.length >= 4) {
+    learnerCode = parts[1];
+    moduleId = parts.slice(2, parts.length - 1).join('_');
+  } else if (parts.length === 3) {
     learnerCode = parts[1];
     moduleId = parts[2];
   }
@@ -270,7 +273,10 @@ export async function completeModuleRun(runId: string): Promise<void> {
   let learnerCode = 'ANON';
   let moduleId = 'money_rules';
   const parts = runId.split('_');
-  if (parts.length >= 3) {
+  if (parts.length >= 4) {
+    learnerCode = parts[1];
+    moduleId = parts.slice(2, parts.length - 1).join('_');
+  } else if (parts.length === 3) {
     learnerCode = parts[1];
     moduleId = parts[2];
   }

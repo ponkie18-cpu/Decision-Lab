@@ -117,8 +117,14 @@ export const AdminAuditLog: React.FC = () => {
       }
 
       // Module filter
-      if (selectedModule !== 'all' && log.moduleId !== selectedModule) {
-        return false;
+      if (selectedModule !== 'all') {
+        if (selectedModule === 'nomsa_fine') {
+          if (log.moduleId !== 'nomsa_fine' && log.moduleId !== 'nomsa_spaza') return false;
+        } else if (selectedModule === 'decision_game') {
+          if (log.moduleId !== 'decision_game' && log.moduleId !== 'strategy' && log.moduleId !== 'game_rounds') return false;
+        } else if (log.moduleId !== selectedModule) {
+          return false;
+        }
       }
 
       // Severity filter
@@ -172,8 +178,11 @@ export const AdminAuditLog: React.FC = () => {
       case 'event_disaster':
         return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
       case 'nomsa_spaza':
+      case 'nomsa_fine':
         return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
       case 'game_rounds':
+      case 'decision_game':
+      case 'strategy':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
       default:
         return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
@@ -305,9 +314,9 @@ export const AdminAuditLog: React.FC = () => {
             >
               <option value="all" className="bg-slate-900 text-slate-200">All Modules</option>
               <option value="money_rules" className="bg-slate-900 text-slate-200">Tuckshop Math (M1)</option>
-              <option value="nomsa_spaza" className="bg-slate-900 text-slate-200">Spaza Compliance (M2)</option>
-              <option value="event_disaster" className="bg-slate-900 text-slate-200">Event Planner (M3)</option>
-              <option value="game_rounds" className="bg-slate-900 text-slate-200">Strategy Arena (M4)</option>
+              <option value="event_disaster" className="bg-slate-900 text-slate-200">School Event Disaster (M2)</option>
+              <option value="nomsa_fine" className="bg-slate-900 text-slate-200">Spaza Compliance (M3)</option>
+              <option value="decision_game" className="bg-slate-900 text-slate-200">Strategy Arena (M4/M5)</option>
             </select>
           </div>
 
