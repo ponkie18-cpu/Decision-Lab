@@ -79,18 +79,20 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
       negativeMarginFound = true;
     }
 
-    // Check Stockout
-    if ((res.missedSales && res.missedSales > 0) || (res.stockoutFrequency && res.stockoutFrequency > 0)) {
-      stockoutFound = true;
-    }
-    if (res.patterns && Array.isArray(res.patterns) && res.patterns.some((p: string) => p.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
-    }
-    if (res.microSignals && Array.isArray(res.microSignals) && res.microSignals.some((m: string) => m.toLowerCase().includes('stockout') || m.toLowerCase().includes('sold out'))) {
-      stockoutFound = true;
-    }
-    if (res.secondaryInsights && Array.isArray(res.secondaryInsights) && res.secondaryInsights.some((s: string) => s.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
+    // PERFORMANCE OPTIMIZATION: Early exit guard for stockout detection.
+    // Once stockoutFound is true, bypass scanning res.patterns, res.microSignals,
+    // and res.secondaryInsights arrays on subsequent rounds.
+    // Expected Impact: Avoids O(N*M) nested array iterations and string allocations across rounds.
+    if (!stockoutFound) {
+      if ((res.missedSales && res.missedSales > 0) || (res.stockoutFrequency && res.stockoutFrequency > 0)) {
+        stockoutFound = true;
+      } else if (res.patterns && Array.isArray(res.patterns) && res.patterns.some((p: string) => p.toLowerCase().includes('stockout'))) {
+        stockoutFound = true;
+      } else if (res.microSignals && Array.isArray(res.microSignals) && res.microSignals.some((m: string) => m.toLowerCase().includes('stockout') || m.toLowerCase().includes('sold out'))) {
+        stockoutFound = true;
+      } else if (res.secondaryInsights && Array.isArray(res.secondaryInsights) && res.secondaryInsights.some((s: string) => s.toLowerCase().includes('stockout'))) {
+        stockoutFound = true;
+      }
     }
 
     // Check Cash Lock: Inventory > 80% of assets AND cash < 150
@@ -179,19 +181,36 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
   return Array.from(tags);
 }
 
+/**
+ * PERFORMANCE OPTIMIZATION: Memoization cache for event planner item cost calculation.
+ * Caches computed cost results for dynamic decision item names to avoid repeated
+ * regex matching (`match(/R([\d,]+)/i)`), string lowercasing, and `Object.entries` loop allocations.
+ * Expected Impact: Reduces cost lookup complexity from O(K) string/regex scans per round item to O(1) Map lookup.
+ */
+const eventPlannerCostCache = new Map<string, number>();
+
 function getEventPlannerCost(item: string): number {
   if (!item || item === 'None' || item.toLowerCase().includes('none') || item.toLowerCase().includes('no safety')) return 0;
   if (EVENT_PLANNER_COSTS[item] !== undefined) return EVENT_PLANNER_COSTS[item];
+
+  const cached = eventPlannerCostCache.get(item);
+  if (cached !== undefined) return cached;
+
+  let cost = 0;
   const match = item.match(/R([\d,]+)/i);
   if (match) {
-    return parseInt(match[1].replace(/,/g, ''), 10) || 0;
-  }
-  for (const [key, cost] of Object.entries(EVENT_PLANNER_COSTS)) {
-    if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
-      return cost;
+    cost = parseInt(match[1].replace(/,/g, ''), 10) || 0;
+  } else {
+    for (const [key, val] of Object.entries(EVENT_PLANNER_COSTS)) {
+      if (item.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(item.toLowerCase())) {
+        cost = val;
+        break;
+      }
     }
   }
-  return 0;
+
+  eventPlannerCostCache.set(item, cost);
+  return cost;
 }
 
 /**
