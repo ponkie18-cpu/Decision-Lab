@@ -19,7 +19,7 @@ import { ModuleRun, RoundRecord } from '../types';
 import { db, auth } from '../firebase';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
-import { detectBehavioralTags } from './behavioralPatterns';
+import { detectBehavioralTags, extractBehavioralFlags } from './behavioralPatterns';
 import { calculateModule1Score, calculateModule3Score } from './reportingService';
 
 // Mock Cohorts and Users for Enterprise Admin Demo
@@ -279,15 +279,17 @@ export async function getUserBehavioralProfile(
   const finControl = currentLiveRun?.score?.financialControl ?? (rounds.length > 0 ? scoreObj.financialControl : 70);
   const opEfficiency = currentLiveRun?.score?.operationalEfficiency ?? (rounds.length > 0 ? scoreObj.operationalEfficiency : 70);
 
-  // Derive radar domain scores deterministically from round metrics
-  const hasNegativeMargin = behavioralTags.some(t => t.toLowerCase().includes('negative margin'));
-  const hasCashLock = behavioralTags.some(t => t.toLowerCase().includes('cash lock'));
-  const hasPriceInstability = behavioralTags.some(t => t.toLowerCase().includes('overcorrection') || t.toLowerCase().includes('instability'));
-  const hasStockout = behavioralTags.some(t => t.toLowerCase().includes('stockout'));
-  const hasAgility = behavioralTags.some(t => t.toLowerCase().includes('agility'));
-  const hasRiskIgnorer = behavioralTags.some(t => t.toLowerCase().includes('risk ignorer'));
-  const hasStrategicAllocator = behavioralTags.some(t => t.toLowerCase().includes('strategic allocator'));
-  const hasContingency = behavioralTags.some(t => t.toLowerCase().includes('contingency'));
+  // Derive radar domain scores deterministically from round metrics in a single pass
+  const {
+    hasNegativeMargin,
+    hasCashLock,
+    hasPriceInstability,
+    hasStockout,
+    hasAgility,
+    hasRiskIgnorer,
+    hasStrategicAllocator,
+    hasContingency,
+  } = extractBehavioralFlags(behavioralTags);
 
   const finPrudenceScore = Math.max(25, Math.min(98, finControl - (hasNegativeMargin ? 25 : 0) - (hasCashLock ? 20 : 0)));
   const compProactivityScore = Math.max(30, Math.min(95, 75 + (hasStrategicAllocator ? 15 : 0)));
@@ -579,20 +581,13 @@ export async function getCohortAggregateReport(
       // Dimension breakdown using real evaluated performance
       if (baselineRun && baselineScoreObj) {
         const tags = detectBehavioralTags(baselineRun.moduleId, baselineRun.rounds);
-        const hasNegMargin = tags.some(t => t.toLowerCase().includes('negative margin'));
-        const hasCashLock = tags.some(t => t.toLowerCase().includes('cash lock'));
-        const hasRiskIgnorer = tags.some(t => t.toLowerCase().includes('risk ignorer'));
-        const hasContingency = tags.some(t => t.toLowerCase().includes('contingency'));
-        const hasStratAllocator = tags.some(t => t.toLowerCase().includes('strategic allocator'));
-        const hasPriceInstability = tags.some(t => t.toLowerCase().includes('overcorrection') || t.toLowerCase().includes('instability'));
-        const hasAgility = tags.some(t => t.toLowerCase().includes('agility'));
-        const hasStockout = tags.some(t => t.toLowerCase().includes('stockout'));
+        const bFlags = extractBehavioralFlags(tags);
 
-        const fin = Math.max(25, Math.min(98, (baselineScoreObj.financialControl ?? 60) - (hasNegMargin ? 25 : 0) - (hasCashLock ? 20 : 0)));
-        const comp = Math.max(30, Math.min(95, 75 + (hasStratAllocator ? 15 : 0)));
-        const risk = Math.max(20, Math.min(98, 70 - (hasRiskIgnorer ? 35 : 0) + (hasContingency ? 20 : 0)));
-        const strat = Math.max(25, Math.min(95, 72 - (hasPriceInstability ? 20 : 0) + (hasAgility ? 18 : 0)));
-        const ops = Math.max(25, Math.min(98, (baselineScoreObj.operationalEfficiency ?? 65) - (hasStockout ? 20 : 0)));
+        const fin = Math.max(25, Math.min(98, (baselineScoreObj.financialControl ?? 60) - (bFlags.hasNegativeMargin ? 25 : 0) - (bFlags.hasCashLock ? 20 : 0)));
+        const comp = Math.max(30, Math.min(95, 75 + (bFlags.hasStrategicAllocator ? 15 : 0)));
+        const risk = Math.max(20, Math.min(98, 70 - (bFlags.hasRiskIgnorer ? 35 : 0) + (bFlags.hasContingency ? 20 : 0)));
+        const strat = Math.max(25, Math.min(95, 72 - (bFlags.hasPriceInstability ? 20 : 0) + (bFlags.hasAgility ? 18 : 0)));
+        const ops = Math.max(25, Math.min(98, (baselineScoreObj.operationalEfficiency ?? 65) - (bFlags.hasStockout ? 20 : 0)));
 
         baselineDimensionSums.fin += fin;
         baselineDimensionSums.comp += comp;
@@ -603,20 +598,13 @@ export async function getCohortAggregateReport(
       }
       if (replayRun && replayScoreObj) {
         const tags = detectBehavioralTags(replayRun.moduleId, replayRun.rounds);
-        const hasNegMargin = tags.some(t => t.toLowerCase().includes('negative margin'));
-        const hasCashLock = tags.some(t => t.toLowerCase().includes('cash lock'));
-        const hasRiskIgnorer = tags.some(t => t.toLowerCase().includes('risk ignorer'));
-        const hasContingency = tags.some(t => t.toLowerCase().includes('contingency'));
-        const hasStratAllocator = tags.some(t => t.toLowerCase().includes('strategic allocator'));
-        const hasPriceInstability = tags.some(t => t.toLowerCase().includes('overcorrection') || t.toLowerCase().includes('instability'));
-        const hasAgility = tags.some(t => t.toLowerCase().includes('agility'));
-        const hasStockout = tags.some(t => t.toLowerCase().includes('stockout'));
+        const rFlags = extractBehavioralFlags(tags);
 
-        const fin = Math.max(25, Math.min(98, (replayScoreObj.financialControl ?? 82) - (hasNegMargin ? 25 : 0) - (hasCashLock ? 20 : 0)));
-        const comp = Math.max(30, Math.min(95, 75 + (hasStratAllocator ? 15 : 0)));
-        const risk = Math.max(20, Math.min(98, 70 - (hasRiskIgnorer ? 35 : 0) + (hasContingency ? 20 : 0)));
-        const strat = Math.max(25, Math.min(95, 72 - (hasPriceInstability ? 20 : 0) + (hasAgility ? 18 : 0)));
-        const ops = Math.max(25, Math.min(98, (replayScoreObj.operationalEfficiency ?? 88) - (hasStockout ? 20 : 0)));
+        const fin = Math.max(25, Math.min(98, (replayScoreObj.financialControl ?? 82) - (rFlags.hasNegativeMargin ? 25 : 0) - (rFlags.hasCashLock ? 20 : 0)));
+        const comp = Math.max(30, Math.min(95, 75 + (rFlags.hasStrategicAllocator ? 15 : 0)));
+        const risk = Math.max(20, Math.min(98, 70 - (rFlags.hasRiskIgnorer ? 35 : 0) + (rFlags.hasContingency ? 20 : 0)));
+        const strat = Math.max(25, Math.min(95, 72 - (rFlags.hasPriceInstability ? 20 : 0) + (rFlags.hasAgility ? 18 : 0)));
+        const ops = Math.max(25, Math.min(98, (replayScoreObj.operationalEfficiency ?? 88) - (rFlags.hasStockout ? 20 : 0)));
 
         replayDimensionSums.fin += fin;
         replayDimensionSums.comp += comp;

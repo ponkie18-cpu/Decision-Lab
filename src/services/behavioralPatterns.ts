@@ -74,34 +74,35 @@ export function detectModule1BehavioralTags(rounds: RoundRecord[]): string[] {
     if (endingCash < lowestCash) lowestCash = endingCash;
     if (i === 0) initialCash = endingCash;
 
-    // Check Negative Margin: Chips cost 5, Drinks cost 6, Sweets cost 3
-    if ((cP > 0 && cP < 5) || (dP > 0 && dP < 6) || (sP > 0 && sP < 3)) {
+    // Check Negative Margin: Chips cost 5, Drinks cost 6, Sweets cost 3 (short-circuit if already found)
+    if (!negativeMarginFound && ((cP > 0 && cP < 5) || (dP > 0 && dP < 6) || (sP > 0 && sP < 3))) {
       negativeMarginFound = true;
     }
 
-    // Check Stockout
-    if ((res.missedSales && res.missedSales > 0) || (res.stockoutFrequency && res.stockoutFrequency > 0)) {
-      stockoutFound = true;
-    }
-    if (res.patterns && Array.isArray(res.patterns) && res.patterns.some((p: string) => p.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
-    }
-    if (res.microSignals && Array.isArray(res.microSignals) && res.microSignals.some((m: string) => m.toLowerCase().includes('stockout') || m.toLowerCase().includes('sold out'))) {
-      stockoutFound = true;
-    }
-    if (res.secondaryInsights && Array.isArray(res.secondaryInsights) && res.secondaryInsights.some((s: string) => s.toLowerCase().includes('stockout'))) {
-      stockoutFound = true;
+    // Check Stockout (short-circuit if already found to avoid redundant array searches & string operations)
+    if (!stockoutFound) {
+      if ((res.missedSales && res.missedSales > 0) || (res.stockoutFrequency && res.stockoutFrequency > 0)) {
+        stockoutFound = true;
+      } else if (res.patterns && Array.isArray(res.patterns) && res.patterns.some((p: string) => typeof p === 'string' && p.toLowerCase().includes('stockout'))) {
+        stockoutFound = true;
+      } else if (res.microSignals && Array.isArray(res.microSignals) && res.microSignals.some((m: string) => typeof m === 'string' && (m.toLowerCase().includes('stockout') || m.toLowerCase().includes('sold out')))) {
+        stockoutFound = true;
+      } else if (res.secondaryInsights && Array.isArray(res.secondaryInsights) && res.secondaryInsights.some((s: string) => typeof s === 'string' && s.toLowerCase().includes('stockout'))) {
+        stockoutFound = true;
+      }
     }
 
-    // Check Cash Lock: Inventory > 80% of assets AND cash < 150
-    const chipsStock = res.inventory?.chips ?? parseInt(d.chipsRestock || '0', 10);
-    const drinksStock = res.inventory?.drinks ?? parseInt(d.drinksRestock || '0', 10);
-    const sweetsStock = res.inventory?.sweets ?? parseInt(d.sweetsRestock || '0', 10);
-    const inventoryVal = (chipsStock * 5) + (drinksStock * 6) + (sweetsStock * 3);
-    const totalAssets = endingCash + inventoryVal;
+    // Check Cash Lock: Inventory > 80% of assets AND cash < 150 (short-circuit if already found)
+    if (!cashLockFound) {
+      const chipsStock = res.inventory?.chips ?? parseInt(d.chipsRestock || '0', 10);
+      const drinksStock = res.inventory?.drinks ?? parseInt(d.drinksRestock || '0', 10);
+      const sweetsStock = res.inventory?.sweets ?? parseInt(d.sweetsRestock || '0', 10);
+      const inventoryVal = (chipsStock * 5) + (drinksStock * 6) + (sweetsStock * 3);
+      const totalAssets = endingCash + inventoryVal;
 
-    if ((totalAssets > 0 && (inventoryVal / totalAssets) > 0.80 && endingCash < 150) || res.cashStatus === 'Critical') {
-      cashLockFound = true;
+      if ((totalAssets > 0 && (inventoryVal / totalAssets) > 0.80 && endingCash < 150) || res.cashStatus === 'Critical') {
+        cashLockFound = true;
+      }
     }
 
     // Price change tracking
@@ -330,6 +331,44 @@ export function detectModule3BehavioralTags(rounds: RoundRecord[]): string[] {
 /**
  * Universal deterministic tag dispatcher by module
  */
+/**
+ * Single-pass helper to extract key behavioral flags from detected tag list.
+ * Prevents calling tags.some(t => t.toLowerCase().includes(...)) repeatedly.
+ */
+export function extractBehavioralFlags(tags: string[]) {
+  let hasNegativeMargin = false;
+  let hasCashLock = false;
+  let hasPriceInstability = false;
+  let hasStockout = false;
+  let hasAgility = false;
+  let hasRiskIgnorer = false;
+  let hasStrategicAllocator = false;
+  let hasContingency = false;
+
+  for (let i = 0; i < tags.length; i++) {
+    const t = tags[i].toLowerCase();
+    if (!hasNegativeMargin && t.includes('negative margin')) hasNegativeMargin = true;
+    if (!hasCashLock && t.includes('cash lock')) hasCashLock = true;
+    if (!hasPriceInstability && (t.includes('overcorrection') || t.includes('instability'))) hasPriceInstability = true;
+    if (!hasStockout && t.includes('stockout')) hasStockout = true;
+    if (!hasAgility && t.includes('agility')) hasAgility = true;
+    if (!hasRiskIgnorer && t.includes('risk ignorer')) hasRiskIgnorer = true;
+    if (!hasStrategicAllocator && t.includes('strategic allocator')) hasStrategicAllocator = true;
+    if (!hasContingency && t.includes('contingency')) hasContingency = true;
+  }
+
+  return {
+    hasNegativeMargin,
+    hasCashLock,
+    hasPriceInstability,
+    hasStockout,
+    hasAgility,
+    hasRiskIgnorer,
+    hasStrategicAllocator,
+    hasContingency,
+  };
+}
+
 export function detectBehavioralTags(module: ModuleType, rounds: RoundRecord[]): string[] {
   if (module === 'money_rules') {
     return detectModule1BehavioralTags(rounds);
