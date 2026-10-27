@@ -1,6 +1,6 @@
 import { GameState, Decisions, RoundResults, RoundRecord } from "../types";
 import { detectBehavioralTags } from "../services/behavioralPatterns";
-import {
+import { 
   EVENT_PLANNER_COSTS,
   M3_ENGINE_OBSOLETE_FINES,
   M4_PAYOFF_MATRIX,
@@ -204,7 +204,7 @@ export function runDeterministicSimulation(
 
     const revenue = Math.round(restockChoice * (1 + margin));
     const coldStorageCost = spoilageChoice.includes("cold") || spoilageChoice.includes("storage") ? M1_COLD_STORAGE_COST : 0;
-
+    
     let spoilageLoss = 0;
     const isSpoilageRound = round === 2 || round === 5 || round === 8 || round === 10;
     if (isSpoilageRound) {

@@ -1,13 +1,13 @@
 // @ts-ignore
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runDeterministicSimulation } from '../services/simulationService';
-import {
-  INITIAL_STATE_MODULE_1,
-  INITIAL_STATE_MODULE_2,
-  INITIAL_STATE_MODULE_3,
-  INITIAL_STATE_MODULE_4,
-  GameState,
-  Decisions
+import { 
+  INITIAL_STATE_MODULE_1, 
+  INITIAL_STATE_MODULE_2, 
+  INITIAL_STATE_MODULE_3, 
+  INITIAL_STATE_MODULE_4, 
+  GameState, 
+  Decisions 
 } from '../types';
 
 describe('Module Progression Simulations (Deterministic Engine)', () => {
@@ -18,7 +18,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
 
   it('Module 1: Money Has Rules (12 Rounds)', () => {
     let state: GameState = { ...INITIAL_STATE_MODULE_1 };
-
+    
     const m1Decisions: Decisions[] = [
       { chipsPrice: "7", drinksPrice: "8", sweetsPrice: "4", chipsRestock: "20", drinksRestock: "20", sweetsRestock: "20" },
       { chipsPrice: "8", drinksPrice: "9", sweetsPrice: "4", chipsRestock: "20", drinksRestock: "20", sweetsRestock: "20" },
@@ -188,7 +188,7 @@ describe('Module Progression Simulations (Deterministic Engine)', () => {
 
     for (let r = 1; r <= 15; r++) {
       const startRound = state.round;
-      const dec: Decisions = r <= 5
+      const dec: Decisions = r <= 5 
         ? { price: "Medium Price", action: "Cooperate" }
         : (r <= 10 ? { action: "Cooperate" } : { offer: "Counter Fair" });
 
